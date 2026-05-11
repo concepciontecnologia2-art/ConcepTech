@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 const WA    = process.env.NEXT_PUBLIC_WHATSAPP!;
 const ALIAS = process.env.NEXT_PUBLIC_STORE_ALIAS!;
 const MAPS  = process.env.NEXT_PUBLIC_MAPS_URL!;
@@ -122,6 +122,8 @@ const handleOrder = async () => {
 const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
   const [current, setCurrent] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
+  const startX = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(()=>{
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -130,11 +132,30 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
     return () => window.removeEventListener("resize", check);
   },[]);
 
+  useEffect(()=>{
+    const el = containerRef.current;
+    if (!el) return;
+    const onTouchStart = (e:TouchEvent) => { startX.current = e.touches[0].clientX; };
+    const onTouchEnd = (e:TouchEvent) => {
+      const diff = startX.current - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 50) {
+        if (diff > 0) setCurrent(i=>i===images.length-1?0:i+1);
+        else setCurrent(i=>i===0?images.length-1:i-1);
+      }
+    };
+    const onTouchMove = (e:TouchEvent) => { e.preventDefault(); };
+    el.addEventListener("touchstart", onTouchStart, { passive:true });
+    el.addEventListener("touchend", onTouchEnd, { passive:true });
+    el.addEventListener("touchmove", onTouchMove, { passive:false });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
+  },[images.length]);
+
   if (!isMobile) return (
-    <div 
-  style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}
-  onTouchStart={e=>e.stopPropagation()}
-  onTouchMove={e=>e.stopPropagation()}>
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${images.length},1fr)`,gap:12,marginBottom:8}}>
       {images.map((img,i)=>(
         <div key={i} style={{borderRadius:12,overflow:"hidden",background:"#f3f4f6"}}>
           <img src={img.src} alt={img.alt} style={{width:"100%",height:"auto",display:"block",objectFit:"contain"}}/>
@@ -143,32 +164,28 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
     </div>
   );
 
- return (
-  <div 
-    style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}
-    onTouchStart={e=>e.stopPropagation()}
-    onTouchMove={e=>e.preventDefault()}
-    onTouchEnd={e=>e.stopPropagation()}>
-    <div style={{display:"flex",transition:"transform .3s ease",transform:`translateX(-${current*100}%)`}}>
-      {images.map((img,i)=>(
-        <img key={i} src={img.src} alt={img.alt}
-          style={{width:"100%",height:"auto",flexShrink:0,objectFit:"contain"}}/>
-      ))}
+  return (
+    <div ref={containerRef}
+      style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}>
+      <div style={{display:"flex",transition:"transform .3s ease",transform:`translateX(-${current*100}%)`}}>
+        {images.map((img,i)=>(
+          <img key={i} src={img.src} alt={img.alt}
+            style={{minWidth:"100%",height:"auto",objectFit:"contain"}}/>
+        ))}
+      </div>
+      <button onClick={()=>setCurrent(i=>i===0?images.length-1:i-1)}
+        style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+      <button onClick={()=>setCurrent(i=>i===images.length-1?0:i+1)}
+        style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+      <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6,zIndex:2}}>
+        {images.map((_,i)=>(
+          <button key={i} onClick={()=>setCurrent(i)}
+            style={{width:i===current?18:6,height:6,borderRadius:10,background:i===current?"#00B4D8":"rgba(255,255,255,.4)",border:"none",cursor:"pointer",transition:"all .3s",padding:0}}/>
+        ))}
+      </div>
     </div>
-    <button onClick={()=>setCurrent(i=>i===0?images.length-1:i-1)}
-      style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-    <button onClick={()=>setCurrent(i=>i===images.length-1?0:i+1)}
-      style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
-    <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6,zIndex:2}}>
-      {images.map((_,i)=>(
-        <button key={i} onClick={()=>setCurrent(i)}
-          style={{width:i===current?18:6,height:6,borderRadius:10,background:i===current?"#00B4D8":"rgba(255,255,255,.4)",border:"none",cursor:"pointer",transition:"all .3s",padding:0}}/>
-      ))}
-    </div>
-  </div>
-);
+  );
 };
-
   const ProductCard = ({p}:{p:Prod}) => {
     const inCart = cart.find(i=>i.id===p.id);
     return (
@@ -541,4 +558,4 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
       )}
     </div>
   );
-};
+}
