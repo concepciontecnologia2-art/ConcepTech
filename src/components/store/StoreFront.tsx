@@ -119,9 +119,13 @@ const handleOrder = async () => {
   const GENERIC = "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80";
   const activeCatData = categories.find(c=>c.slug===activeCat);
 
+
 const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
   const [current, setCurrent] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const isDragging = useRef(false);
 
   useEffect(()=>{
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -129,6 +133,29 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   },[]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isDragging.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dx > dy) {
+      isDragging.current = true;
+      e.stopPropagation();
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (diff > 40) setCurrent(i=>i===images.length-1?0:i+1);
+    else if (diff < -40) setCurrent(i=>i===0?images.length-1:i-1);
+    isDragging.current = false;
+  };
 
   if (!isMobile) return (
     <div style={{display:"grid",gridTemplateColumns:`repeat(${images.length},1fr)`,gap:12,marginBottom:8}}>
@@ -141,16 +168,24 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
   );
 
   return (
-    <div style={{position:"relative",borderRadius:14,background:"#f3f4f6",width:"100%",marginBottom:8,overflow:"hidden",userSelect:"none",WebkitUserSelect:"none"}}>
-      <style>{`.no-swipe{touch-action:none;-webkit-overflow-scrolling:auto;overscroll-behavior:none}`}</style>
-      <div className="no-swipe" style={{width:"100%",overflow:"hidden"}}>
-        <div style={{display:"flex",width:`${images.length*100}%`,transform:`translateX(-${current*(100/images.length)}%)`,transition:"transform .35s ease"}}>
-          {images.map((img,i)=>(
-            <div key={i} style={{width:`${100/images.length}%`,flexShrink:0}}>
-              <img src={img.src} alt={img.alt} style={{width:"100%",height:"auto",display:"block",objectFit:"contain",pointerEvents:"none",draggable:false} as any}/>
-            </div>
-          ))}
-        </div>
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{position:"relative",borderRadius:14,background:"#f3f4f6",width:"100%",marginBottom:8,overflow:"hidden"}}>
+      <div style={{
+        display:"flex",
+        width:`${images.length*100}%`,
+        transform:`translateX(-${current*(100/images.length)}%)`,
+        transition:"transform .35s ease"
+      }}>
+        {images.map((img,i)=>(
+          <div key={i} style={{width:`${100/images.length}%`,flexShrink:0}}>
+            <img src={img.src} alt={img.alt}
+              style={{width:"100%",height:"auto",display:"block",objectFit:"contain"}}
+              draggable={false}/>
+          </div>
+        ))}
       </div>
       <button onClick={()=>setCurrent(i=>i===0?images.length-1:i-1)}
         style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:36,height:36,borderRadius:"50%",background:"rgba(0,0,0,.7)",border:"1px solid rgba(255,255,255,.3)",color:"#fff",fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
