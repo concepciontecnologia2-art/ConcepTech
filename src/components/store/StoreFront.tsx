@@ -131,7 +131,10 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
   },[]);
 
   if (!isMobile) return (
-    <div style={{display:"grid",gridTemplateColumns:`repeat(${images.length},1fr)`,gap:12,marginBottom:8}}>
+    <div 
+  style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}
+  onTouchStart={e=>e.stopPropagation()}
+  onTouchMove={e=>e.stopPropagation()}>
       {images.map((img,i)=>(
         <div key={i} style={{borderRadius:12,overflow:"hidden",background:"#f3f4f6"}}>
           <img src={img.src} alt={img.alt} style={{width:"100%",height:"auto",display:"block",objectFit:"contain"}}/>
