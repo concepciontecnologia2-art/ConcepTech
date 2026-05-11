@@ -1,6 +1,5 @@
 "use client";
-import { useState, useMemo, useCallback } from "react";
-
+import { useState, useEffect, useMemo, useCallback } from "react";
 const WA    = process.env.NEXT_PUBLIC_WHATSAPP!;
 const ALIAS = process.env.NEXT_PUBLIC_STORE_ALIAS!;
 const MAPS  = process.env.NEXT_PUBLIC_MAPS_URL!;
@@ -124,33 +123,29 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
   const [current, setCurrent] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
 
-  useMemo(()=>{
+  useEffect(()=>{
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   },[]);
 
-  
-
-  // DESKTOP — todas las fotos una al lado de la otra
   if (!isMobile) return (
-  <div style={{display:"grid",gridTemplateColumns:`repeat(${images.length},1fr)`,gap:12,marginBottom:8}}>
-    {images.map((img,i)=>(
-      <div key={i} style={{borderRadius:12,overflow:"hidden",background:"#f3f4f6"}}>
-        <img src={img.src} alt={img.alt} style={{width:"100%",height:"auto",display:"block",objectFit:"contain"}}/>
-      </div>
-    ))}
-  </div>
-);
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${images.length},1fr)`,gap:12,marginBottom:8}}>
+      {images.map((img,i)=>(
+        <div key={i} style={{borderRadius:12,overflow:"hidden",background:"#f3f4f6"}}>
+          <img src={img.src} alt={img.alt} style={{width:"100%",height:"auto",display:"block",objectFit:"contain"}}/>
+        </div>
+      ))}
+    </div>
+  );
 
-  // MOBILE — carrusel
- return (
-  <div style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}>
-    {images.map((img,i)=>(
-      <img key={i} src={img.src} alt={img.alt}
-        style={{width:"100%",height:"auto",display:i===current?"block":"none",objectFit:"contain"}}/>
-    ))}
+  return (
+    <div style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}>
+      {images.map((img,i)=>(
+        <img key={i} src={img.src} alt={img.alt}
+          style={{width:"100%",height:"auto",display:i===current?"block":"none",objectFit:"contain"}}/>
+      ))}
       <button onClick={()=>setCurrent(i=>i===0?images.length-1:i-1)}
         style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
       <button onClick={()=>setCurrent(i=>i===images.length-1?0:i+1)}
