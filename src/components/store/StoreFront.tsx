@@ -131,11 +131,7 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
     return () => window.removeEventListener("resize", check);
   },[]);
 
-  useMemo(()=>{
-    if (!isMobile) return;
-    const t = setInterval(()=>setCurrent(i=>i===images.length-1?0:i+1), 4000);
-    return ()=>clearInterval(t);
-  },[images.length, isMobile]);
+  
 
   // DESKTOP — todas las fotos una al lado de la otra
   if (!isMobile) return (
