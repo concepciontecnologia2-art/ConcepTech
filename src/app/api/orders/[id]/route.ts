@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryOne } from "@/lib/db";
+
 export const dynamic = "force-dynamic";
+
 type P = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: P) {
@@ -9,10 +11,16 @@ export async function PATCH(req: NextRequest, { params }: P) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const { id } = await params;
   const b = await req.json();
+  
   const fields = Object.keys(b);
-  const vals   = Object.values(b);
-  const set    = fields.map((f,i)=>`${f}=$${i+1}`).join(", ");
-  const order  = await queryOne(
+  const vals = Object.values(b).map(v => {
+    if (v === "true") return true;
+    if (v === "false") return false;
+    return v;
+  });
+  
+  const set = fields.map((f,i)=>`${f}=$${i+1}`).join(", ");
+  const order = await queryOne(
     `UPDATE orders SET ${set} WHERE id=$${fields.length+1} RETURNING *`,
     [...vals, id]
   );
