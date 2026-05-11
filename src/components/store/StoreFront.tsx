@@ -402,13 +402,19 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
 {!activeCat&&!search&&(
   <section style={{marginBottom:28}}>
     <h2 className="st">🔥 Ofertas y ✨ Novedades</h2>
-    <Carrusel images={[
-      { src:"/images/oferta1.jpg", alt:"Oferta 1" },
-      { src:"/images/oferta2.jpg", alt:"Oferta 2" },
-      { src:"/images/novedad3.jpg", alt:"Oferta 3" },
-      { src:"/images/novedad1.jpg", alt:"Novedad 1" },
-      { src:"/images/novedad2.jpg", alt:"Novedad 2" },
-    ]}/>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12,marginBottom:16}}>
+      {[
+        { src:"/images/oferta1.jpg", alt:"Oferta 1" },
+        { src:"/images/oferta2.jpg", alt:"Oferta 2" },
+        { src:"/images/novedad3.jpg", alt:"Oferta 3" },
+        { src:"/images/novedad1.jpg", alt:"Novedad 1" },
+        { src:"/images/novedad2.jpg", alt:"Novedad 2" },
+      ].map((img,i)=>(
+        <div key={i} style={{borderRadius:12,overflow:"hidden",background:"#f3f4f6"}}>
+          <img src={img.src} alt={img.alt} style={{width:"100%",height:"auto",display:"block",objectFit:"contain"}}/>
+        </div>
+      ))}
+    </div>
     {offers.length>0&&(
       <div className="sx" style={{marginTop:14}}>
         {offers.map(p=><div key={p.id} style={{width:180,flexShrink:0}}><ProductCard p={p}/></div>)}
@@ -416,8 +422,6 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
     )}
   </section>
 )}
-
-
           
         {/* PRODUCTOS POR CATEGORÍA */}
 {Object.entries(grouped).map(([catName,prods])=>(
