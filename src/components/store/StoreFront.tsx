@@ -143,24 +143,30 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
     </div>
   );
 
-  return (
-    <div style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}>
+ return (
+  <div 
+    style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#f3f4f6",width:"100%",marginBottom:8}}
+    onTouchStart={e=>e.stopPropagation()}
+    onTouchMove={e=>e.preventDefault()}
+    onTouchEnd={e=>e.stopPropagation()}>
+    <div style={{display:"flex",transition:"transform .3s ease",transform:`translateX(-${current*100}%)`}}>
       {images.map((img,i)=>(
         <img key={i} src={img.src} alt={img.alt}
-          style={{width:"100%",height:"auto",display:i===current?"block":"none",objectFit:"contain"}}/>
+          style={{width:"100%",height:"auto",flexShrink:0,objectFit:"contain"}}/>
       ))}
-      <button onClick={()=>setCurrent(i=>i===0?images.length-1:i-1)}
-        style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
-      <button onClick={()=>setCurrent(i=>i===images.length-1?0:i+1)}
-        style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
-      <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6,zIndex:2}}>
-        {images.map((_,i)=>(
-          <button key={i} onClick={()=>setCurrent(i)}
-            style={{width:i===current?18:6,height:6,borderRadius:10,background:i===current?"#00B4D8":"rgba(255,255,255,.4)",border:"none",cursor:"pointer",transition:"all .3s",padding:0}}/>
-        ))}
-      </div>
     </div>
-  );
+    <button onClick={()=>setCurrent(i=>i===0?images.length-1:i-1)}
+      style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+    <button onClick={()=>setCurrent(i=>i===images.length-1?0:i+1)}
+      style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",zIndex:2,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.6)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+    <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6,zIndex:2}}>
+      {images.map((_,i)=>(
+        <button key={i} onClick={()=>setCurrent(i)}
+          style={{width:i===current?18:6,height:6,borderRadius:10,background:i===current?"#00B4D8":"rgba(255,255,255,.4)",border:"none",cursor:"pointer",transition:"all .3s",padding:0}}/>
+      ))}
+    </div>
+  </div>
+);
 };
 
   const ProductCard = ({p}:{p:Prod}) => {
@@ -535,4 +541,4 @@ const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
       )}
     </div>
   );
-}
+};
