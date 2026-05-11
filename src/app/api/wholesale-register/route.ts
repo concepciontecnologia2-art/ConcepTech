@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryOne } from "@/lib/db";
-
+export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const { name, phone, email } = await req.json();
   if (!name || !phone || !email) return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });

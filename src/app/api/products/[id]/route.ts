@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne } from "@/lib/db";
-
+export const dynamic = "force-dynamic";
 type P = { params: Promise<{ id: string }> };
 
 function isAdmin(req: NextRequest) {
