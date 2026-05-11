@@ -19,15 +19,12 @@ export default function HomePage() {
   };
 
   useEffect(()=>{
-    loadData();
-    const interval = setInterval(loadData, 30000);
-    const onFocus = () => loadData();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  },[]);
+  loadData();
+  const interval = setInterval(loadData, 30000);
+  return () => {
+    clearInterval(interval);
+  };
+},[]);
 
   if (loading) return (
     <div style={{minHeight:"100vh",background:"#080c10",display:"flex",alignItems:"center",justifyContent:"center",color:"#445",fontFamily:"sans-serif",fontSize:14}}>
