@@ -163,6 +163,7 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   const [loading, setLoading]       = useState(true);
   const [expandedOrder, setExpandedOrder]     = useState<number|null>(null);
   const [catFilter, setCatFilter]             = useState("all");
+  const [searchProd, setSearchProd]           = useState("");
   const [editingProduct, setEditingProduct]   = useState<any|null>(null);
   const [addingProduct, setAddingProduct]     = useState(false);
   const [newProduct, setNewProduct] = useState({
@@ -260,17 +261,16 @@ ${lines}
     URL.revokeObjectURL(a.href);
   };
 
-  const [searchProd, setSearchProd] = useState("");
   const totalPaid    = orders.filter(o=>o.paid).reduce((s,o)=>s+Number(o.total),0);
   const totalPending = orders.filter(o=>!o.paid&&o.status!=="cancelled").reduce((s,o)=>s+Number(o.total),0);
   const pendingCount = orders.filter(o=>o.status==="pending").length;
   const uniqueCats   = [...new Set(products.map((p:any)=>p.category_name))];
-const filteredProds = products
-  .filter((p:any) => catFilter==="all" || p.category_name===catFilter)
-  .filter((p:any) => !searchProd || p.name.toLowerCase().includes(searchProd.toLowerCase()));
-  const nav = (a:boolean) => ({display:"flex" as const,alignItems:"center" as const,gap:9,padding:"9px 12px",borderRadius:9,border:"none" as const,background:a?"rgba(0,180,216,.08)":"transparent",color:a?"#00B4D8":"#444",cursor:"pointer" as const,fontSize:13,fontWeight:500 as const,fontFamily:"inherit",width:"100%",textAlign:"left" as const,borderLeft:`2px solid ${a?"#00B4D8":"transparent"}`});
+  const filteredProds= products
+    .filter((p:any)=>catFilter==="all"||p.category_name===catFilter)
+    .filter((p:any)=>!searchProd||p.name.toLowerCase().includes(searchProd.toLowerCase()));
+
   const card = {background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:13,padding:"16px 18px"};
-  const btn  = (v:string) => {
+  const btn = (v:string) => {
     const base = {padding:"6px 12px",borderRadius:7,fontSize:12,fontWeight:600 as const,cursor:"pointer" as const,fontFamily:"inherit"};
     if (v==="cyan")  return {...base,background:"rgba(0,180,216,.1)",  color:"#00B4D8",border:"1px solid rgba(0,180,216,.3)"};
     if (v==="red")   return {...base,background:"rgba(239,68,68,.1)",  color:"#ef4444",border:"1px solid rgba(239,68,68,.3)"};
@@ -283,7 +283,7 @@ const filteredProds = products
   if(loading) return <div style={{minHeight:"100vh",background:"#f2f4f7",display:"flex",alignItems:"center",justifyContent:"center",color:"#444",fontFamily:"inherit"}}>Cargando...</div>;
 
   return (
-    <div style={{minHeight:"100vh",background:"#f2f4f7",color:"#1a1a1a",fontFamily:"'DM Sans',system-ui,sans-serif",display:"flex"}}>
+    <div style={{minHeight:"100vh",background:"#f2f4f7",color:"#1a1a1a",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
@@ -296,35 +296,44 @@ const filteredProds = products
         .pill{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600}
         select{padding:6px 9px;background:#ffffff;border:1px solid #e5e7eb;border-radius:7px;color:#1a1a1a;font-size:12px;outline:none;cursor:pointer;font-family:inherit}
         select option{background:#ffffff;color:#1a1a1a}
-        .mo{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px}
-        .mb{background:#ffffff;border:1px solid #e5e7eb;border-radius:18px;padding:24px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto}
+        .mo{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;padding:0}
+        @media(min-width:640px){.mo{align-items:center;padding:16px}}
+        .mb{background:#ffffff;border:1px solid #e5e7eb;border-radius:20px 20px 0 0;padding:24px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto}
+        @media(min-width:640px){.mb{border-radius:18px}}
         .toggle{width:34px;height:19px;border-radius:10px;border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
         .thumb{position:absolute;width:13px;height:13px;background:white;border-radius:50%;top:3px;transition:left .2s}
+        .admin-nav{display:flex;background:#ffffff;border-bottom:1px solid #e5e7eb;padding:0 16px;position:sticky;top:0;z-index:50;overflow-x:auto;gap:0}
+        .admin-nav::-webkit-scrollbar{display:none}
+        .nav-btn{padding:14px 16px;background:none;border:none;border-bottom:2px solid transparent;color:#666;cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;white-space:nowrap;transition:all .2s;display:flex;align-items:center;gap:6px}
+        .nav-btn.active{color:#00B4D8;border-bottom-color:#00B4D8}
+        .admin-content{padding:16px;max-width:100%;overflow-x:hidden}
+        @media(min-width:768px){.admin-content{padding:24px}}
+        .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
       `}</style>
 
-      {/* SIDEBAR */}
-      <nav style={{width:200,background:"#ffffff",borderRight:"1px solid #e5e7eb",padding:"20px 11px",display:"flex",flexDirection:"column",gap:4,flexShrink:0,minHeight:"100vh"}}>
-        <div style={{marginBottom:20,paddingLeft:12}}>
-          <p style={{fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:800,color:"#1a1a1a"}}><span style={{color:"#00B4D8"}}>Conc.</span> Tech</p>
-          <p style={{fontSize:10,color:"#999",marginTop:2,letterSpacing:".06em"}}>PANEL ADMIN</p>
-        </div>
+      {/* TOPBAR */}
+      <div style={{background:"#ffffff",borderBottom:"1px solid #e5e7eb",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <p style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:800,color:"#1a1a1a"}}><span style={{color:"#00B4D8"}}>Conc.</span> Tech <span style={{fontSize:11,color:"#999",fontWeight:400}}>Admin</span></p>
+        <button onClick={onLogout} style={{padding:"6px 12px",borderRadius:7,background:"#f3f4f6",border:"1px solid #e5e7eb",color:"#444",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Salir</button>
+      </div>
+
+      {/* NAV TABS */}
+      <div className="admin-nav">
         {([["dashboard","◈","Dashboard"],["orders","📋","Pedidos"],["products","📦","Productos"]] as const).map(([id,icon,label])=>(
-          <button key={id} style={nav(tab===id)} onClick={()=>setTab(id)}>
-            <span>{icon}</span>{label}
-            {id==="orders"&&pendingCount>0&&<span style={{marginLeft:"auto",background:"#f59e0b",color:"#ffffff",borderRadius:20,padding:"1px 6px",fontSize:10,fontWeight:800}}>{pendingCount}</span>}
+          <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>
+            {icon} {label}
+            {id==="orders"&&pendingCount>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,padding:"1px 6px",fontSize:10,fontWeight:800}}>{pendingCount}</span>}
           </button>
         ))}
-        <div style={{flex:1}}/>
-        <button style={nav(false)} onClick={onLogout}><span>⇤</span>Cerrar sesión</button>
-      </nav>
+      </div>
 
-      <main style={{flex:1,padding:"24px 20px",overflowY:"auto",maxHeight:"100vh"}}>
+      <div className="admin-content">
 
         {/* DASHBOARD */}
         {tab==="dashboard"&&(
           <div>
-            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:21,fontWeight:800,marginBottom:18,color:"#1a1a1a"}}>Dashboard</h2>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:11,marginBottom:22}}>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,marginBottom:16,color:"#1a1a1a"}}>Dashboard</h2>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:20}}>
               {[
                 {label:"Cobrado",       value:fmt(totalPaid),    icon:"💰",color:"#10b981"},
                 {label:"Por cobrar",    value:fmt(totalPending), icon:"⏳",color:"#f59e0b"},
@@ -332,11 +341,11 @@ const filteredProds = products
                 {label:"Total pedidos", value:orders.length,     icon:"📋",color:"#a78bfa"},
               ].map((m,i)=>(
                 <div key={i} style={card}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
                     <p style={{fontSize:10,color:"#666",fontWeight:600}}>{m.label.toUpperCase()}</p>
                     <span>{m.icon}</span>
                   </div>
-                  <p style={{fontSize:20,fontWeight:800,color:m.color,fontFamily:"'Syne',sans-serif"}}>{m.value}</p>
+                  <p style={{fontSize:"clamp(16px,4vw,22px)",fontWeight:800,color:m.color,fontFamily:"'Syne',sans-serif"}}>{m.value}</p>
                 </div>
               ))}
             </div>
@@ -345,18 +354,21 @@ const filteredProds = products
                 <h3 style={{fontSize:14,fontWeight:600,color:"#1a1a1a"}}>Últimos pedidos</h3>
                 <button style={btn("cyan")} onClick={()=>setTab("orders")}>Ver todos →</button>
               </div>
-              <table>
-                <thead><tr><th>CLIENTE</th><th>TOTAL</th><th>ESTADO</th><th>PAGO</th><th>FECHA</th></tr></thead>
-                <tbody>{orders.slice(0,5).map((o:any)=>(
-                  <tr key={o.id}>
-                    <td><p style={{fontWeight:500,color:"#1a1a1a"}}>{o.customer_name}</p><p style={{fontSize:11,color:"#666"}}>{o.phone}</p></td>
-                    <td style={{color:"#00B4D8",fontWeight:700}}>{fmt(Number(o.total))}</td>
-                    <td><span className="pill" style={{background:STATUS[o.status]?.bg,color:STATUS[o.status]?.color}}>{STATUS[o.status]?.label}</span></td>
-                    <td><span className="pill" style={{background:o.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:o.paid?"#10b981":"#f59e0b"}}>{o.paid?"Pagado":"Pendiente"}</span></td>
-                    <td style={{color:"#666",fontSize:11}}>{fmtDate(o.created_at)}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {orders.slice(0,5).map((o:any)=>(
+                  <div key={o.id} style={{padding:"10px 12px",background:"#f9fafb",borderRadius:10,border:"1px solid #e5e7eb"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <p style={{fontWeight:600,color:"#1a1a1a",fontSize:13}}>{o.customer_name}</p>
+                      <p style={{color:"#00B4D8",fontWeight:700,fontSize:14}}>{fmt(Number(o.total))}</p>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <span className="pill" style={{background:STATUS[o.status]?.bg,color:STATUS[o.status]?.color}}>{STATUS[o.status]?.label}</span>
+                      <span className="pill" style={{background:o.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:o.paid?"#10b981":"#f59e0b"}}>{o.paid?"Pagado":"Pendiente"}</span>
+                      <span style={{fontSize:11,color:"#666"}}>{fmtDate(o.created_at)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             {products.filter((p:any)=>p.stock_level==="bajo").length>0&&(
               <div style={{...card,marginTop:12}}>
@@ -378,23 +390,26 @@ const filteredProds = products
         {/* PEDIDOS */}
         {tab==="orders"&&(
           <div>
-            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:21,fontWeight:800,marginBottom:18,color:"#1a1a1a"}}>Pedidos</h2>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,marginBottom:16,color:"#1a1a1a"}}>Pedidos</h2>
             <div style={{display:"flex",flexDirection:"column",gap:9}}>
               {orders.length===0&&<p style={{color:"#666",fontSize:14}}>No hay pedidos aún.</p>}
               {orders.map((order:any)=>(
                 <div key={order.id} style={card}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",cursor:"pointer"}} onClick={()=>setExpandedOrder(expandedOrder===order.id?null:order.id)}>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
-                        <p style={{fontWeight:600,fontSize:14,color:"#1a1a1a"}}>{order.customer_name}</p>
-                        <span className="pill" style={{background:STATUS[order.status]?.bg,color:STATUS[order.status]?.color}}>{STATUS[order.status]?.label}</span>
-                        <span className="pill" style={{background:order.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:order.paid?"#10b981":"#f59e0b"}}>{order.paid?"💰 Pagado":"⏳ Sin pagar"}</span>
+                  <div style={{cursor:"pointer"}} onClick={()=>setExpandedOrder(expandedOrder===order.id?null:order.id)}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                      <div>
+                        <p style={{fontWeight:600,fontSize:14,color:"#1a1a1a",marginBottom:4}}>{order.customer_name}</p>
+                        <p style={{fontSize:12,color:"#666"}}>{"📞 "}{order.phone}</p>
+                        <p style={{fontSize:11,color:"#666"}}>{order.delivery_type==="pickup"?"🏪 Retira":"🚗 Envío"} · {order.sale_type==="retail"?"Minorista":"Mayorista"}</p>
                       </div>
-                      <p style={{fontSize:12,color:"#666"}}>{"📞"} {order.phone} · {order.delivery_type==="pickup"?"🏪 Retira":"🚗 Envío"} · {order.sale_type==="retail"?"Minorista":"Mayorista"}</p>
+                      <div style={{textAlign:"right"}}>
+                        <p style={{fontSize:18,fontWeight:800,color:"#00B4D8"}}>{fmt(Number(order.total))}</p>
+                        <p style={{fontSize:10,color:"#666"}}>{fmtDate(order.created_at)}</p>
+                      </div>
                     </div>
-                    <div style={{textAlign:"right"}}>
-                      <p style={{fontSize:19,fontWeight:800,color:"#00B4D8"}}>{fmt(Number(order.total))}</p>
-                      <p style={{fontSize:11,color:"#666"}}>{fmtDate(order.created_at)}</p>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <span className="pill" style={{background:STATUS[order.status]?.bg,color:STATUS[order.status]?.color}}>{STATUS[order.status]?.label}</span>
+                      <span className="pill" style={{background:order.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:order.paid?"#10b981":"#f59e0b"}}>{order.paid?"💰 Pagado":"⏳ Sin pagar"}</span>
                     </div>
                   </div>
                   {expandedOrder===order.id&&(
@@ -405,23 +420,25 @@ const filteredProds = products
                           <span style={{color:"#00B4D8",fontWeight:600}}>{fmt(item.qty*item.price)}</span>
                         </div>
                       ))}
-                      {order.address&&<p style={{fontSize:12,color:"#666",marginTop:9}}>📍 {order.address}</p>}
-                      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:11}}>
-                        <span style={{fontSize:11,color:"#666",alignSelf:"center",fontWeight:600}}>ESTADO:</span>
-                        {["pending","confirmed","completed","cancelled"].map(s=>(
-                          <button key={s} style={{...btn(s==="completed"?"green":s==="cancelled"?"red":s==="confirmed"?"cyan":"amber"),opacity:order.status===s?1:.5}}
-                            onClick={()=>patchOrder(order.id,{status:s})}>
-                            {STATUS[s].label}
+                      {order.address&&<p style={{fontSize:12,color:"#666",marginTop:9}}>{"📍 "}{order.address}</p>}
+                      <div style={{marginTop:12}}>
+                        <p style={{fontSize:11,color:"#666",fontWeight:600,marginBottom:8}}>CAMBIAR ESTADO:</p>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                          {["pending","confirmed","completed","cancelled"].map(s=>(
+                            <button key={s} style={{...btn(s==="completed"?"green":s==="cancelled"?"red":s==="confirmed"?"cyan":"amber"),opacity:order.status===s?1:.5}}
+                              onClick={()=>patchOrder(order.id,{status:s})}>
+                              {STATUS[s].label}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                          <button style={btn(order.paid?"amber":"green")} onClick={()=>patchOrder(order.id,{paid:!order.paid})}>
+                            {order.paid?"Marcar sin pagar":"✓ Marcar pagado"}
                           </button>
-                        ))}
-                      </div>
-                      <div style={{display:"flex",gap:7,marginTop:9,flexWrap:"wrap"}}>
-                        <button style={btn(order.paid?"amber":"green")} onClick={()=>patchOrder(order.id,{paid:!order.paid})}>
-                          {order.paid?"Marcar sin pagar":"✓ Marcar pagado"}
-                        </button>
-                        <button style={btn("default")} onClick={()=>downloadFact(order)}>
-                          {"📄 Descargar factura"}
-                        </button>
+                          <button style={btn("default")} onClick={()=>downloadFact(order)}>
+                            {"📄 Factura"}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -450,77 +467,63 @@ const filteredProds = products
                 alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
               }}
             />
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
               <div>
-                <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:21,fontWeight:800,marginBottom:2,color:"#1a1a1a"}}>Productos</h2>
+                <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Productos</h2>
                 <p style={{color:"#666",fontSize:12}}>{products.length} productos · {products.filter((p:any)=>p.available).length} disponibles</p>
               </div>
-              <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar producto</button>
+              <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar</button>
             </div>
-            <div style={{display:"flex",gap:8,marginBottom:13,alignItems:"center",flexWrap:"wrap"}}>
-  <div style={{position:"relative",flexShrink:0}}>
-    <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13}}>🔍</span>
-    <input
-      value={searchProd}
-      onChange={e=>setSearchProd(e.target.value)}
-      placeholder="Buscar producto..."
-      style={{padding:"7px 10px 7px 32px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,fontSize:12,outline:"none",fontFamily:"inherit",color:"#1a1a1a",width:200}}
-    />
-  </div>
-  <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4}}>
-    {["all",...uniqueCats].map(c=>(
-      <button key={c as string} onClick={()=>setCatFilter(c as string)}
-        style={{padding:"5px 13px",borderRadius:7,border:`1px solid ${catFilter===c?"rgba(0,180,216,.4)":"#e5e7eb"}`,background:catFilter===c?"rgba(0,180,216,.1)":"#ffffff",color:catFilter===c?"#00B4D8":"#444",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-        {c==="all"?"Todos":c as string}
-      </button>
-    ))}
-  </div>
-</div>
-            <div style={card}>
-              <table>
-                <thead><tr><th>PRODUCTO</th><th>CATEGORÍA</th><th>MINORISTA</th><th>MAYORISTA</th><th>STOCK</th><th>DISP.</th><th>OFERTA</th><th>ACCIONES</th></tr></thead>
-                <tbody>{filteredProds.map((p:any)=>(
-                  <tr key={p.id}>
-                    <td>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        {p.image_url&&<img src={p.image_url} style={{width:30,height:30,borderRadius:6,objectFit:"cover",flexShrink:0}}/>}
-                        <span style={{fontWeight:500,fontSize:12,color:"#1a1a1a"}}>{p.name}</span>
-                      </div>
-                    </td>
-                    <td style={{color:"#666",fontSize:11}}>{p.category_name}</td>
-                    <td style={{color:"#00B4D8",fontWeight:600,fontSize:12}}>{fmt(Number(p.price_retail))}</td>
-                    <td style={{color:"#3b82f6",fontWeight:600,fontSize:12}}>{fmt(Number(p.price_wholesale))}</td>
-                    <td>
+
+            {/* BÚSQUEDA Y FILTROS */}
+            <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+              <div style={{position:"relative",flex:1,minWidth:180}}>
+                <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13}}>🔍</span>
+                <input value={searchProd} onChange={e=>setSearchProd(e.target.value)} placeholder="Buscar producto..."
+                  style={{width:"100%",padding:"8px 10px 8px 30px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,fontSize:12,outline:"none",fontFamily:"inherit",color:"#1a1a1a"}}/>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+              {["all",...uniqueCats].map(c=>(
+                <button key={c as string} onClick={()=>setCatFilter(c as string)}
+                  style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${catFilter===c?"rgba(0,180,216,.4)":"#e5e7eb"}`,background:catFilter===c?"rgba(0,180,216,.1)":"#ffffff",color:catFilter===c?"#00B4D8":"#444",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
+                  {c==="all"?"Todos":c as string}
+                </button>
+              ))}
+            </div>
+
+            {/* LISTA MOBILE DE PRODUCTOS */}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {filteredProds.map((p:any)=>(
+                <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
+                  {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontWeight:600,fontSize:13,color:"#1a1a1a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</p>
+                    <p style={{fontSize:11,color:"#666",marginTop:2}}>{p.category_name}</p>
+                    <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
+                      <span style={{fontSize:11,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</span>
                       <select value={p.stock_level} onChange={e=>patchProduct(p.id,{stock_level:e.target.value})}
-                        style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:11,borderRadius:6,padding:"3px 7px"}}>
+                        style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:10,borderRadius:6,padding:"2px 6px"}}>
                         <option value="alto">🟢 Alto</option>
                         <option value="medio">🟡 Medio</option>
                         <option value="bajo">🔴 Bajo</option>
                       </select>
-                    </td>
-                    <td>
-                      <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
-                        <div className="thumb" style={{left:p.available?18:3}}/>
-                      </button>
-                    </td>
-                    <td>
-                      <button className="toggle" style={{background:p.is_offer?"rgba(239,68,68,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{is_offer:!p.is_offer})}>
-                        <div className="thumb" style={{left:p.is_offer?18:3}}/>
-                      </button>
-                    </td>
-                    <td>
-                      <div style={{display:"flex",gap:5}}>
-                        <button style={btn("cyan")} onClick={()=>setEditingProduct({...p})}>Editar</button>
-                        <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>Eliminar</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}</tbody>
-              </table>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
+                    <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
+                      <div className="thumb" style={{left:p.available?18:3}}/>
+                    </button>
+                    <button style={btn("cyan")} onClick={()=>setEditingProduct({...p})}>✏️</button>
+                    <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
-      </main>
+      </div>
 
       {/* MODAL EDITAR */}
       {editingProduct&&(
@@ -540,9 +543,7 @@ const filteredProds = products
               <div>
                 <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
                 <select value={editingProduct.stock_level} onChange={e=>setEditingProduct((p:any)=>({...p,stock_level:e.target.value}))} style={{...inp,cursor:"pointer"}}>
-                  <option value="alto">🟢 Alto</option>
-                  <option value="medio">🟡 Medio</option>
-                  <option value="bajo">🔴 Bajo</option>
+                  <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
                 </select>
               </div>
               <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
@@ -587,9 +588,7 @@ const filteredProds = products
               <div>
                 <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
                 <select style={{...inp,cursor:"pointer"}} value={newProduct.stock_level} onChange={e=>setNewProduct(p=>({...p,stock_level:e.target.value}))}>
-                  <option value="alto">🟢 Alto</option>
-                  <option value="medio">🟡 Medio</option>
-                  <option value="bajo">🔴 Bajo</option>
+                  <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
                 </select>
               </div>
               <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
@@ -610,7 +609,6 @@ const filteredProds = products
     </div>
   );
 }
-
 export default function AdminPage() {
   const [authed, setAuthed] = useState<boolean|null>(null);
 
