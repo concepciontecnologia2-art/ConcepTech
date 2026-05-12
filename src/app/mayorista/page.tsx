@@ -9,7 +9,10 @@ async function getData() {
       fetch(`${base}/api/products`, { cache:"no-store" }).then(r=>r.json()),
       fetch(`${base}/api/categories`, { cache:"no-store" }).then(r=>r.json()),
     ]);
-    return { products: Array.isArray(p)?p:[], categories: Array.isArray(c)?c:[] };
+    return {
+      products: Array.isArray(p) ? p : [],
+      categories: Array.isArray(c) ? c : []
+    };
   } catch {
     return { products: [], categories: [] };
   }
@@ -17,5 +20,5 @@ async function getData() {
 
 export default async function Page() {
   const { products, categories } = await getData();
-  return <MayoristaPage initialProducts={products} categories={categories} />;
+  return <MayoristaPage initialProducts={products} categories={categories}/>;
 }
