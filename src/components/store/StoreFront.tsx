@@ -376,6 +376,8 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
                 { src:"/images/1.jpg", alt:"Novedad 2" },
                 { src:"/images/2.jpg", alt:"Novedad 2" },
                 { src:"/images/3.jpg", alt:"Novedad 2" },
+                { src:"/images/5.jpg", alt:"Novedad 2" },
+                { src:"/images/6.jpg", alt:"novedad 2"},
                 
               ]}/>
               {offers.length>0&&(
