@@ -331,7 +331,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
           <div style={{display:"flex",gap:8,marginBottom:14}}>
             <div style={{position:"relative",flex:1,minWidth:0}}>
               <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:15,pointerEvents:"none"}}>🔍</span>
-              <input className="if" placeholder="Buscar mejores precios minoristas..." value={search} onChange={e=>setSearch(e.target.value)}/>
+              <input className="if" placeholder="PRECIO POR MENOR" value={search} onChange={e=>setSearch(e.target.value)}/>
             </div>
             <select value={sort} onChange={e=>setSort(e.target.value as "default"|"asc"|"desc")}
               style={{padding:"11px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:10,color:"#1a1a1a",fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
@@ -370,11 +370,13 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
             <section style={{marginBottom:28}}>
               <h2 className="st">{"🔥 Ofertas y ✨ Novedades"}</h2>
               <Carrusel images={[
-                { src:"/images/oferta1.jpg", alt:"Oferta 1" },
-                { src:"/images/oferta2.jpg", alt:"Oferta 2" },
+                { src:"/images/1.jpg", alt:"Oferta 1" },
                 { src:"/images/novedad3.jpg", alt:"Oferta 3" },
                 { src:"/images/novedad1.jpg", alt:"Novedad 1" },
-                { src:"/images/novedad2.jpg", alt:"Novedad 2" },
+                { src:"/images/1.jpg", alt:"Novedad 2" },
+                { src:"/images/2.jpg", alt:"Novedad 2" },
+                { src:"/images/3.jpg", alt:"Novedad 2" },
+                
               ]}/>
               {offers.length>0&&(
                 <div className="sx" style={{marginTop:14}}>

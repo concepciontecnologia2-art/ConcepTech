@@ -188,7 +188,7 @@ ${lines}
 
   if (!registered) return (
     <div style={{minHeight:"100vh",background:"#ffffff",fontFamily:"'DM Sans',system-ui,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}.if2{width:100%;padding:13px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;color:#1a1a1a;font-size:14px;outline:none;transition:border-color .2s;font-family:inherit}.if2:focus{border-color:rgba(0,180,216,.4)}.if2::placeholder{color:#999}`}</style>
+    <style dangerouslySetInnerHTML={{__html:`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}.if2{width:100%;padding:13px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;color:#1a1a1a;font-size:14px;outline:none;transition:border-color .2s;font-family:inherit}.if2:focus{border-color:rgba(0,180,216,.4)}.if2::placeholder{color:#999}`}}/>
       <div style={{width:"100%",maxWidth:420}}>
         <div style={{textAlign:"center",marginBottom:32}}>
           <a href="/" style={{display:"inline-block",fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#1a1a1a",textDecoration:"none",marginBottom:8}}>
