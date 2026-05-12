@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 const WA    = process.env.NEXT_PUBLIC_WHATSAPP!;
 const ALIAS = process.env.NEXT_PUBLIC_STORE_ALIAS!;
@@ -12,17 +12,8 @@ type Cat  = { id:number; name:string; icon:string; slug:string };
 type Item = Prod & { qty:number };
 
 export default function MayoristaPage({ initialProducts, categories }: { initialProducts: Prod[]; categories: Cat[] }) {
-  const [registered, setRegistered] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !!localStorage.getItem("mayorista_name");
-  });
-  const [regForm, setRegForm] = useState(() => {
-    if (typeof window === "undefined") return { name:"", phone:"" };
-    return {
-      name:  localStorage.getItem("mayorista_name")  || "",
-      phone: localStorage.getItem("mayorista_phone") || "",
-    };
-  });
+  const [registered, setRegistered] = useState(false);
+  const [regForm, setRegForm] = useState({ name:"", phone:"" });
   const [regError, setRegError]   = useState("");
   const [regLoading, setRegLoading] = useState(false);
   const [products] = useState<Prod[]>(initialProducts);
@@ -34,23 +25,33 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [orderDone, setOrderDone] = useState(false);
   const [payMethod, setPayMethod] = useState<"transfer"|"cash">("transfer");
-  const [form, setForm] = useState({ name:regForm.name, phone:regForm.phone, delivery:"pickup", address:"" });
+  const [form, setForm] = useState({ name:"", phone:"", delivery:"pickup", address:"" });
+
+  useEffect(()=>{
+    const name = localStorage.getItem("mayorista_name") || "";
+    const phone = localStorage.getItem("mayorista_phone") || "";
+    if (name) {
+      setRegistered(true);
+      setRegForm({ name, phone });
+      setForm(f=>({...f, name, phone }));
+    }
+  },[]);
 
   const handleRegister = async () => {
     if (!regForm.name||!regForm.phone) { setRegError("Completá todos los campos"); return; }
     setRegLoading(true);
     try {
-      await fetch("/api/wholesale-register",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({...regForm, email:""}) });
+      await fetch("/api/wholesale-register",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ name:regForm.name, phone:regForm.phone }) });
     } catch(e){}
     localStorage.setItem("mayorista_name", regForm.name);
     localStorage.setItem("mayorista_phone", regForm.phone);
     setRegistered(true);
-    setForm(f=>({...f,name:regForm.name,phone:regForm.phone}));
+    setForm(f=>({...f, name:regForm.name, phone:regForm.phone }));
     setRegLoading(false);
   };
 
   const filtered = useMemo(() => {
-    let p = products.filter(x=>x.available);
+    let p = products.filter(x=>x.available===true||(x.available as any)==="true");
     if (activeCat) p = p.filter(x=>{ const cat=categories.find(c=>c.slug===activeCat); return cat?.name===x.category_name; });
     if (search.trim()) p = p.filter(x=>x.name.toUpperCase().includes(search.toUpperCase()));
     if (sort==="asc")  p=[...p].sort((a,b)=>Number(a.price_wholesale)-Number(b.price_wholesale));
@@ -201,12 +202,12 @@ ${lines}
         </div>
         <div style={{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:18,padding:28}}>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            {[["Nombre completo","text","name","Tu nombre"],["Teléfono","tel","phone","3865 xxxxxx"]].map(([label,type,key,ph])=>(
-              <div key={key as string}>
-                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:5,fontWeight:600}}>{(label as string).toUpperCase()}</label>
-                <input type={type as string} className="if2" placeholder={ph as string}
-                  value={(regForm as Record<string,string>)[key as string]}
-                  onChange={e=>setRegForm(f=>({...f,[key as string]:e.target.value}))}
+            {([["Nombre completo","text","name","Tu nombre"],["Teléfono","tel","phone","3865 xxxxxx"]] as [string,string,string,string][]).map(([label,type,key,ph])=>(
+              <div key={key}>
+                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:5,fontWeight:600}}>{label.toUpperCase()}</label>
+                <input type={type} className="if2" placeholder={ph}
+                  value={(regForm as Record<string,string>)[key]}
+                  onChange={e=>setRegForm(f=>({...f,[key]:e.target.value}))}
                   onKeyDown={e=>e.key==="Enter"&&handleRegister()}/>
               </div>
             ))}
@@ -244,7 +245,6 @@ ${lines}
         @keyframes fU{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
       `}</style>
 
-      {/* HEADER */}
       <header style={{position:"sticky",top:0,zIndex:50,borderBottom:"1px solid #e5e7eb",background:"#ffffff",padding:"14px 20px"}}>
         <div style={{maxWidth:1400,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
           <div>
@@ -262,7 +262,6 @@ ${lines}
       </header>
 
       <main style={{maxWidth:1400,margin:"0 auto",padding:"24px 20px 100px"}}>
-        {/* BÚSQUEDA */}
         <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
           <div style={{position:"relative",flex:1,minWidth:220}}>
             <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:15}}>🔍</span>
@@ -276,7 +275,6 @@ ${lines}
           </select>
         </div>
 
-        {/* CATEGORÍAS */}
         <div className="sx2" style={{marginBottom:18}}>
           <button className={`pb2 ${!activeCat?"active":""}`} onClick={()=>setActiveCat(null)}>{"✦ Todos"}</button>
           {categories.map(c=>(
@@ -286,19 +284,16 @@ ${lines}
           ))}
         </div>
 
-        {/* PRODUCTOS */}
         {Object.entries(grouped).map(([catName,prods])=>(
           <MayoristaCategorySection key={catName} catName={catName} prods={prods}/>
         ))}
       </main>
 
-      {/* BOTÓN SUBIR */}
       <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
         style={{position:"fixed",bottom:cartCount>0?80:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(59,130,246,.15)",border:"1px solid rgba(59,130,246,.4)",color:"#3b82f6",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
         ↑
       </button>
 
-      {/* CARRITO FLOTANTE */}
       {cartCount>0&&!cartOpen&&(
         <button onClick={()=>setCartOpen(true)} style={{position:"fixed",bottom:20,right:20,zIndex:9001,background:"#3b82f6",color:"#fff",border:"none",borderRadius:50,padding:"13px 22px",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 24px rgba(59,130,246,.4)",display:"flex",alignItems:"center",gap:8,fontFamily:"inherit"}}>
           {"🛒 Carrito "}
@@ -306,7 +301,6 @@ ${lines}
         </button>
       )}
 
-      {/* DRAWER CARRITO */}
       {cartOpen&&(
         <div className="drawer">
           <div className="overlay" onClick={()=>setCartOpen(false)}/>
@@ -345,7 +339,6 @@ ${lines}
         </div>
       )}
 
-      {/* MODAL CHECKOUT */}
       {checkoutOpen&&!orderDone&&(
         <div className="modal">
           <div className="modal-box">
@@ -407,7 +400,6 @@ ${lines}
 
             <p style={{fontSize:13,color:"#666",textAlign:"center",marginBottom:14}}>Total: <strong style={{color:"#3b82f6"}}>{fmt(cartTotal)}</strong> (Mayorista)</p>
 
-            {/* CONSULTAR STOCK */}
             <button onClick={()=>{
               const lines = cart.map(i=>`• ${i.qty}x ${i.name}`).join("\n");
               const msg = encodeURIComponent(`Hola! Quiero consultar disponibilidad mayorista de los siguientes productos:\n\n${lines}\n\n¿Tienen stock?`);
@@ -419,14 +411,13 @@ ${lines}
 
             <button onClick={handleOrder} disabled={!form.name||!form.phone}
               style={{width:"100%",padding:14,background:"#25D366",border:"none",borderRadius:12,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(!form.name||!form.phone)?.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              {"💬 Enviar comprobante de compra por WhatsApp"}
+              {"💬 Enviar pedido por WhatsApp"}
             </button>
             <button onClick={()=>setCheckoutOpen(false)} style={{marginTop:8,width:"100%",background:"none",border:"none",color:"#666",fontSize:12,cursor:"pointer",padding:7,fontFamily:"inherit"}}>{"← Volver"}</button>
           </div>
         </div>
       )}
 
-      {/* PEDIDO EXITOSO */}
       {orderDone&&(
         <div className="modal">
           <div className="modal-box" style={{textAlign:"center"}}>
