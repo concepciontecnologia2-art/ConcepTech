@@ -154,7 +154,6 @@ function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; p
     </div>
   );
 }
-
 function Panel({ onLogout }: { onLogout:()=>void }) {
   const [tab, setTab]               = useState<"dashboard"|"orders"|"products">("dashboard");
   const [orders, setOrders]         = useState<any[]>([]);
@@ -166,10 +165,23 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   const [searchProd, setSearchProd]           = useState("");
   const [editingProduct, setEditingProduct]   = useState<any|null>(null);
   const [addingProduct, setAddingProduct]     = useState(false);
+  const [uploadingId, setUploadingId]         = useState<number|null>(null);
   const [newProduct, setNewProduct] = useState({
     name:"", description:"", category_id:"", price_retail:"", price_wholesale:"",
-    stock_level:"alto", available:true, featured:false, is_offer:false, is_new:false, image_url:""
+    stock_level:"alto", stock_quantity:0, available:true, featured:false, is_offer:false, is_new:false, image_url:""
   });
+
+  const uploadPhoto = async(id:number, file:File)=>{
+    setUploadingId(id);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+      const json = await res.json();
+      if (json.url) await patchProduct(id,{image_url:json.url});
+    } catch(e){ alert("Error al subir la foto"); }
+    setUploadingId(null);
+  };
 
   useEffect(()=>{
     const loadData = () => {
@@ -215,12 +227,13 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
       category_id:Number(newProduct.category_id),
       price_retail:Number(newProduct.price_retail),
       price_wholesale:Number(newProduct.price_wholesale),
+      stock_quantity:Number(newProduct.stock_quantity),
     })});
     const p = await res.json();
     const cat = categories.find((c:any)=>c.id===Number(newProduct.category_id));
     setProducts(prev=>[...prev,{...p,category_name:cat?.name||""}]);
     setAddingProduct(false);
-    setNewProduct({name:"",description:"",category_id:"",price_retail:"",price_wholesale:"",stock_level:"alto",available:true,featured:false,is_offer:false,is_new:false,image_url:""});
+    setNewProduct({name:"",description:"",category_id:"",price_retail:"",price_wholesale:"",stock_level:"alto",stock_quantity:0,available:true,featured:false,is_offer:false,is_new:false,image_url:""});
   };
 
   const deleteProduct = async(id:number)=>{
@@ -308,7 +321,6 @@ ${lines}
         .nav-btn.active{color:#00B4D8;border-bottom-color:#00B4D8}
         .admin-content{padding:16px;max-width:100%;overflow-x:hidden}
         @media(min-width:768px){.admin-content{padding:24px}}
-        .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
       `}</style>
 
       {/* TOPBAR */}
@@ -377,7 +389,7 @@ ${lines}
                   <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",background:"rgba(239,68,68,.05)",border:"1px solid rgba(239,68,68,.15)",borderRadius:8,marginBottom:7}}>
                     <div style={{flex:1}}>
                       <p style={{fontSize:13,fontWeight:500,color:"#1a1a1a"}}>{p.name}</p>
-                      <p style={{fontSize:11,color:"#666"}}>{p.category_name}</p>
+                      <p style={{fontSize:11,color:"#666"}}>{p.category_name} · {p.stock_quantity??0} u.</p>
                     </div>
                     <span style={{color:"#ef4444",fontWeight:700,fontSize:11,padding:"2px 8px",background:"rgba(239,68,68,.15)",borderRadius:6}}>STOCK BAJO</span>
                   </div>
@@ -492,7 +504,7 @@ ${lines}
               ))}
             </div>
 
-            {/* LISTA MOBILE DE PRODUCTOS */}
+            {/* LISTA DE PRODUCTOS */}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {filteredProds.map((p:any)=>(
                 <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
@@ -503,19 +515,30 @@ ${lines}
                     <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
                       <span style={{fontSize:11,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:4}}>
                       <select value={p.stock_level} onChange={e=>patchProduct(p.id,{stock_level:e.target.value})}
                         style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:10,borderRadius:6,padding:"2px 6px"}}>
                         <option value="alto">🟢 Alto</option>
                         <option value="medio">🟡 Medio</option>
                         <option value="bajo">🔴 Bajo</option>
                       </select>
+                      <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
+                      <input type="number" min="0" defaultValue={p.stock_quantity??0}
+                        onBlur={e=>patchProduct(p.id,{stock_quantity:Number(e.target.value)})}
+                        style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
                     </div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
                     <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
                       <div className="thumb" style={{left:p.available?18:3}}/>
                     </button>
-                    <button style={btn("cyan")} onClick={()=>setEditingProduct({...p})}>✏️</button>
+                    <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+  {uploadingId===p.id?"⏳":"📷"}
+  <input type="file" accept="image/*" style={{display:"none"}}
+    onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPhoto(p.id,f); e.target.value="";}}/>
+</label>
+<button style={btn("cyan")} onClick={()=>setEditingProduct({...p})}>✏️</button>
                     <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
                   </div>
                 </div>
@@ -524,6 +547,12 @@ ${lines}
           </div>
         )}
       </div>
+
+      {/* BOTÓN SUBIR */}
+      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+        style={{position:"fixed",bottom:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",color:"#00B4D8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
+        ↑
+      </button>
 
       {/* MODAL EDITAR */}
       {editingProduct&&(
@@ -534,14 +563,14 @@ ${lines}
               <button onClick={()=>setEditingProduct(null)} style={{background:"none",border:"none",color:"#666",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:11}}>
-              {([["Nombre","name","text"],["Descripción","description","text"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
+              {([["Nombre","name","text"],["Descripción","description","text"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["Stock","stock_quantity","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
                 <div key={key}>
                   <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>{label.toUpperCase()}</label>
                   <input type={type} style={inp} value={(editingProduct[key]??"")} onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
                 </div>
               ))}
               <div>
-                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
+                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
                 <select value={editingProduct.stock_level} onChange={e=>setEditingProduct((p:any)=>({...p,stock_level:e.target.value}))} style={{...inp,cursor:"pointer"}}>
                   <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
                 </select>
@@ -584,13 +613,19 @@ ${lines}
                 <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>MINORISTA *</label><input type="number" style={inp} value={newProduct.price_retail} onChange={e=>setNewProduct(p=>({...p,price_retail:e.target.value}))}/></div>
                 <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>MAYORISTA *</label><input type="number" style={inp} value={newProduct.price_wholesale} onChange={e=>setNewProduct(p=>({...p,price_wholesale:e.target.value}))}/></div>
               </div>
-              <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>URL IMAGEN</label><input style={inp} placeholder="https://..." value={newProduct.image_url} onChange={e=>setNewProduct(p=>({...p,image_url:e.target.value}))}/></div>
-              <div>
-                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
-                <select style={{...inp,cursor:"pointer"}} value={newProduct.stock_level} onChange={e=>setNewProduct(p=>({...p,stock_level:e.target.value}))}>
-                  <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
-                </select>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+                <div>
+                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK (CANTIDAD)</label>
+                  <input type="number" min="0" style={inp} value={newProduct.stock_quantity} onChange={e=>setNewProduct(p=>({...p,stock_quantity:Number(e.target.value)}))}/>
+                </div>
+                <div>
+                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
+                  <select style={{...inp,cursor:"pointer"}} value={newProduct.stock_level} onChange={e=>setNewProduct(p=>({...p,stock_level:e.target.value}))}>
+                    <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
+                  </select>
+                </div>
               </div>
+              <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>URL IMAGEN</label><input style={inp} placeholder="https://..." value={newProduct.image_url} onChange={e=>setNewProduct(p=>({...p,image_url:e.target.value}))}/></div>
               <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
                 {([["available","Disponible"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as [string,string][]).map(([key,label])=>(
                   <label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",color:"#1a1a1a"}}>
@@ -609,6 +644,7 @@ ${lines}
     </div>
   );
 }
+
 export default function AdminPage() {
   const [authed, setAuthed] = useState<boolean|null>(null);
 
