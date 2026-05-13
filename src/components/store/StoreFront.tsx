@@ -372,7 +372,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
               <Carrusel images={[
               { src:"/images/12.jpeg", alt:"novedad 26"},
               { src:"/images/13.jpeg", alt:"novedad 27"},
-              { src:"/images/13.jpeg", alt:"novedad 28"},
+              { src:"/images/11.jpeg", alt:"novedad 28"},
               { src:"/images/14.jpeg", alt:"novedad 29"},
                 { src:"/images/novedad3.jpg", alt:"Oferta 3" },
                 { src:"/images/novedad1.jpg", alt:"Novedad 1" },
