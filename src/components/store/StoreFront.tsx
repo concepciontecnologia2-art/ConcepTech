@@ -520,13 +520,18 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
               </div>
             </div>
 
-            {payMethod==="transfer"&&(
-              <div style={{padding:"10px 13px",background:"rgba(0,180,216,.06)",borderRadius:10,border:"1px solid rgba(0,180,216,.15)",marginBottom:12}}>
-                <p style={{fontSize:11,color:"#666",marginBottom:2}}>ALIAS DE PAGO</p>
-                <p style={{fontSize:15,fontWeight:700,color:"#00B4D8"}}>{ALIAS}</p>
-                <p style={{fontSize:11,color:"#f59e0b",marginTop:4,fontWeight:500}}>{"⚠️ Adjuntá el comprobante al mensaje de WhatsApp"}</p>
-              </div>
-            )}
+           {payMethod==="transfer"&&(
+  <div style={{padding:"10px 13px",background:"rgba(0,180,216,.06)",borderRadius:10,border:"1px solid rgba(0,180,216,.15)",marginBottom:12}}>
+    <p style={{fontSize:12,color:"#ef4444",fontWeight:700,marginBottom:8}}>{"⚠️ CONSULTÁ STOCK POR WHATSAPP ANTES DE TRANSFERIR"}</p>
+    <p style={{fontSize:11,color:"#666",marginBottom:6,fontWeight:600}}>ALIAS DE PAGO</p>
+    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:4}}>concepciontecno.4</p>
+    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:4}}>sebas.vaquera</p>
+    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:4}}>angeles003.belo</p>
+    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:0}}>sebas.vaquera</p>
+    <p style={{fontSize:11,color:"#f59e0b",marginTop:8,fontWeight:500}}>{"⚠️ Adjuntá el comprobante al mensaje de WhatsApp"}</p>
+  </div>
+)}
+            
             {payMethod==="cash"&&(
               <div style={{padding:"10px 13px",background:"rgba(16,185,129,.06)",borderRadius:10,border:"1px solid rgba(16,185,129,.2)",marginBottom:12}}>
                 <p style={{fontSize:12,color:"#10b981",fontWeight:600}}>{"💵 Pagás en efectivo al retirar o recibir el pedido"}</p>
