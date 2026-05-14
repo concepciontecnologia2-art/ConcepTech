@@ -109,17 +109,22 @@ export default function ProductoPage() {
         )}
 
         {/* BOTONES */}
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          <button onClick={handleWsp}
-            style={{width:"100%",padding:14,background:"#25D366",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            💬 Consultar por WhatsApp
-          </button>
-          <a href="/"
-            style={{width:"100%",padding:14,background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:12,color:"#00B4D8",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,textDecoration:"none"}}>
-            🛒 Ver todos los productos
-          </a>
-        </div>
-
+<div style={{display:"flex",flexDirection:"column",gap:10}}>
+  {Number(product.stock_quantity)>0&&(
+    <a href={`/?agregarId=${product.id}&qty=${qty}`}
+      style={{width:"100%",padding:14,background:"#00B4D8",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,textDecoration:"none"}}>
+      🛒 Agregar al carrito
+    </a>
+  )}
+  <button onClick={handleWsp}
+    style={{width:"100%",padding:14,background:"#25D366",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+    💬 Consultar por WhatsApp
+  </button>
+  <a href="/"
+    style={{width:"100%",padding:14,background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:12,color:"#00B4D8",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,textDecoration:"none"}}>
+    ← Ver todos los productos
+  </a>
+</div>
         {/* COMPARTIR */}
         <div style={{marginTop:24,padding:"16px",background:"#f9fafb",borderRadius:12,border:"1px solid #e5e7eb"}}>
           <p style={{fontSize:12,color:"#666",fontWeight:600,marginBottom:10}}>COMPARTIR PRODUCTO</p>

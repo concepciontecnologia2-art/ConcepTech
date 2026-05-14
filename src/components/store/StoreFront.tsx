@@ -185,6 +185,22 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   }, 500);
 },[products]);
 
+useEffect(()=>{
+  const params = new URLSearchParams(window.location.search);
+  const agregarId = params.get("agregarId");
+  const qty = Number(params.get("qty")||1);
+  if (!agregarId||!products.length) return;
+  const prod = products.find(p=>p.id===Number(agregarId));
+  if (!prod) return;
+  setCart(prev=>{
+    const ex = prev.find(i=>i.id===prod.id);
+    if (ex) return prev.map(i=>i.id===prod.id?{...i,qty:i.qty+qty}:i);
+    return [...prev,{...prod,qty}];
+  });
+  setCartOpen(true);
+  window.history.replaceState({},"","/");
+},[products]);
+
     const handleTouchStart = (e: React.TouchEvent) => {
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
