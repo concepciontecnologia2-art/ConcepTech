@@ -377,8 +377,6 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
                 { src:"/images/novedad3.jpg", alt:"Oferta 3" },
                 { src:"/images/novedad1.jpg", alt:"Novedad 1" },
                 { src:"/images/1.jpg", alt:"Novedad 2" },
-                { src:"/images/2.jpg", alt:"Novedad 3" },
-                { src:"/images/3.jpg", alt:"Novedad 4" },
                 { src:"/images/5.jpg", alt:"Novedad 5" },
                 { src:"/images/6.jpg", alt:"novedad 6"},
                 
