@@ -174,6 +174,17 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
       window.addEventListener("resize", check);
       return () => window.removeEventListener("resize", check);
     },[]);
+    
+    useEffect(()=>{
+  if (!products.length) return;
+  const hash = window.location.hash;
+  if (!hash.startsWith("#producto-")) return;
+  const id = hash.replace("#producto-","");
+  setTimeout(()=>{
+    const el = document.getElementById(`producto-${id}`);
+    if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
+  }, 500);
+},[products]);
 
     const handleTouchStart = (e: React.TouchEvent) => {
       touchStartX.current = e.touches[0].clientX;
