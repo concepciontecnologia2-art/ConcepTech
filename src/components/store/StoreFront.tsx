@@ -519,17 +519,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
               </div>
             </div>
 
-           {payMethod==="transfer"&&(
-  <div style={{padding:"10px 13px",background:"rgba(0,180,216,.06)",borderRadius:10,border:"1px solid rgba(0,180,216,.15)",marginBottom:12}}>
-    <p style={{fontSize:12,color:"#ef4444",fontWeight:700,marginBottom:8}}>{"⚠️ CONSULTÁ STOCK POR WHATSAPP ANTES DE TRANSFERIR"}</p>
-    <p style={{fontSize:11,color:"#666",marginBottom:6,fontWeight:600}}>ALIAS DE PAGO</p>
-    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:4}}>concepciontecno.4</p>
-    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:4}}>sebas.vaquera</p>
-    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:4}}>angeles003.belo</p>
-    <p style={{fontSize:14,fontWeight:700,color:"#00B4D8",marginBottom:0}}>sebas.vaquera</p>
-    <p style={{fontSize:11,color:"#f59e0b",marginTop:8,fontWeight:500}}>{"⚠️ Adjuntá el comprobante al mensaje de WhatsApp"}</p>
-  </div>
-)}
+         
             
             {payMethod==="cash"&&(
               <div style={{padding:"10px 13px",background:"rgba(16,185,129,.06)",borderRadius:10,border:"1px solid rgba(16,185,129,.2)",marginBottom:12}}>
@@ -539,16 +529,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
 
             <p style={{fontSize:13,color:"#666",textAlign:"center",marginBottom:12}}>Total: <strong style={{color:"#00B4D8"}}>{fmt(cartTotal)}</strong></p>
 
-            {/* CONSULTAR STOCK */}
-            <button onClick={()=>{
-              const lines = cart.map(i=>`• ${i.qty}x ${i.name}`).join("\n");
-              const msg = encodeURIComponent(`Hola! Quiero consultar disponibilidad de los siguientes productos:\n\n${lines}\n\n¿Tienen stock?`);
-              window.open(`https://wa.me/${WA}?text=${msg}`,"_blank");
-            }}
-              style={{width:"100%",padding:12,background:"rgba(37,211,102,.08)",border:"1px solid rgba(37,211,102,.3)",borderRadius:11,color:"#25D366",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              {"💬 Consultar disponibilidad por WhatsApp"}
-            </button>
-
+           
             {countdown!==null ? (
               <div style={{textAlign:"center",padding:"16px 0"}}>
                 <div style={{fontSize:48,fontWeight:800,color:"#00B4D8",fontFamily:"'Syne',sans-serif",lineHeight:1}}>{countdown}</div>
@@ -561,7 +542,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
               <>
                 <button onClick={handleOrder} disabled={!form.name||!form.phone||sending}
                   style={{width:"100%",padding:13,background:"#25D366",border:"none",borderRadius:11,color:"white",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:(!form.name||!form.phone||sending)?.5:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                  {"💬 "}{sending?"Procesando...":"Enviar comprobante de compra por WhatsApp"}
+                  {"💬 "}{sending?"Procesando...":"Enviar pedido por WhatsApp"}
                 </button>
                 <button onClick={()=>{setCheckoutOpen(false);setCartOpen(true)}} style={{marginTop:8,width:"100%",background:"none",border:"none",color:"#666",fontSize:12,cursor:"pointer",padding:7,fontFamily:"inherit"}}>{"← Volver"}</button>
               </>
