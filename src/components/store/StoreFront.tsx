@@ -76,15 +76,14 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   const cartTotal = cart.reduce((s,i)=>s+i.qty*Number(i.price_retail),0);
 
  const shareProduct = (p:Prod, via:string) => {
+  const url = `${window.location.origin}/producto/${p.id}`;
   const text = `🛒 ${p.name} — ${fmt(Number(p.price_retail))} | Concepción Tecnología`;
-  const url  = `${window.location.origin}#producto-${p.id}`;
-  if (via==="wa") window.open(`https://wa.me/?text=${encodeURIComponent(text+" "+url)}`,"_blank");
-  if (via==="fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,"_blank");
-  if (via==="ig") navigator.clipboard.writeText(text+" "+url)
+  if (via==="wa") window.open(`https://wa.me/?text=${encodeURIComponent(text+"\n"+url)}`,"_blank");
+  if (via==="fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,"_blank");
+  if (via==="ig") navigator.clipboard.writeText(text+"\n"+url)
     .then(()=>alert("✅ Link copiado. Pegalo en Instagram."))
-    .catch(()=>alert("Copiá este link: "+url));
+    .catch(()=>alert("Copiá este link:\n"+url));
 };
-
   const handleOrder = async () => {
     if (!form.name||!form.phone||sending) return;
     setSending(true);
@@ -174,7 +173,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
       window.addEventListener("resize", check);
       return () => window.removeEventListener("resize", check);
     },[]);
-    
+
     useEffect(()=>{
   if (!products.length) return;
   const hash = window.location.hash;
