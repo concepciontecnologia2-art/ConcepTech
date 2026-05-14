@@ -75,15 +75,15 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   const cartCount = cart.reduce((s,i)=>s+i.qty,0);
   const cartTotal = cart.reduce((s,i)=>s+i.qty*Number(i.price_retail),0);
 
-  const shareProduct = (p:Prod, via:string) => {
-    const text = `🛒 ${p.name} — ${fmt(Number(p.price_retail))} | Concepción Tecnología`;
-    const url  = window.location.href.split("?")[0];
-    if (via==="wa") window.open(`https://wa.me/?text=${encodeURIComponent(text+" "+url)}`,"_blank");
-    if (via==="fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,"_blank");
-    if (via==="ig") navigator.clipboard.writeText(text+" "+url)
-      .then(()=>alert("✅ Link copiado. Pegalo en Instagram."))
-      .catch(()=>alert("Copiá este link: "+url));
-  };
+ const shareProduct = (p:Prod, via:string) => {
+  const text = `🛒 ${p.name} — ${fmt(Number(p.price_retail))} | Concepción Tecnología`;
+  const url  = `${window.location.origin}#producto-${p.id}`;
+  if (via==="wa") window.open(`https://wa.me/?text=${encodeURIComponent(text+" "+url)}`,"_blank");
+  if (via==="fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,"_blank");
+  if (via==="ig") navigator.clipboard.writeText(text+" "+url)
+    .then(()=>alert("✅ Link copiado. Pegalo en Instagram."))
+    .catch(()=>alert("Copiá este link: "+url));
+};
 
   const handleOrder = async () => {
     if (!form.name||!form.phone||sending) return;
@@ -116,7 +116,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   const ProductCard = ({p}:{p:Prod}) => {
     const inCart = cart.find(i=>i.id===p.id);
     return (
-      <div style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:14,overflow:"hidden",display:"flex",flexDirection:"column",transition:"border-color .2s",height:"100%"}}
+      <div id={`producto-${p.id}`} style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:14,overflow:"hidden",display:"flex",flexDirection:"column",transition:"border-color .2s",height:"100%"}}
         onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(0,180,216,.35)"}
         onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(255,255,255,.07)"}>
         <div style={{position:"relative",paddingBottom:"65%",overflow:"hidden",background:"#f8f8f8"}}>
@@ -457,10 +457,11 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
                   <p style={{fontSize:13,color:"#00B4D8",fontWeight:700}}>{fmt(Number(item.price_retail)*item.qty)}</p>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:7}}>
-                  <button onClick={()=>updateQty(item.id,-1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-                  <span style={{fontSize:13,fontWeight:600,minWidth:14,textAlign:"center",color:"#1a1a1a"}}>{item.qty}</span>
-                  <button onClick={()=>updateQty(item.id,1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-                </div>
+  <button onClick={()=>updateQty(item.id,-1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+  <span style={{fontSize:13,fontWeight:600,minWidth:14,textAlign:"center",color:"#1a1a1a"}}>{item.qty}</span>
+  <button onClick={()=>updateQty(item.id,1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+  <button onClick={()=>setCart(prev=>prev.filter(i=>i.id!==item.id))} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(239,68,68,.3)",background:"rgba(239,68,68,.08)",color:"#ef4444",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>
+</div>
               </div>
             ))}
             <div style={{padding:"12px 0",borderTop:"1px solid #e5e7eb",marginBottom:12,display:"flex",justifyContent:"space-between"}}>
