@@ -521,8 +521,8 @@ ${lines}
                 <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
                   {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
                   <div style={{flex:1,minWidth:0}}>
-                    <p style={{fontWeight:600,fontSize:13,color:"#1a1a1a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</p>
                     <p style={{fontSize:11,color:"#666",marginTop:2}}>{p.category_name}</p>
+                    <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
                     <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
                       <span style={{fontSize:11,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</span>
