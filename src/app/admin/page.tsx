@@ -368,18 +368,29 @@ ${lines}
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {orders.slice(0,5).map((o:any)=>(
-                  <div key={o.id} style={{padding:"10px 12px",background:"#f9fafb",borderRadius:10,border:"1px solid #e5e7eb"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                      <p style={{fontWeight:600,color:"#1a1a1a",fontSize:13}}>{o.customer_name}</p>
-                      <p style={{color:"#00B4D8",fontWeight:700,fontSize:14}}>{fmt(Number(o.total))}</p>
-                    </div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      <span className="pill" style={{background:STATUS[o.status]?.bg,color:STATUS[o.status]?.color}}>{STATUS[o.status]?.label}</span>
-                      <span className="pill" style={{background:o.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:o.paid?"#10b981":"#f59e0b"}}>{o.paid?"Pagado":"Pendiente"}</span>
-                      <span style={{fontSize:11,color:"#666"}}>{fmtDate(o.created_at)}</span>
-                    </div>
-                  </div>
-                ))}
+  <div key={o.id} style={{padding:"10px 12px",background:"#f9fafb",borderRadius:10,border:"1px solid #e5e7eb"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+      <p style={{fontWeight:600,color:"#1a1a1a",fontSize:13}}>{o.customer_name}</p>
+      <p style={{color:"#00B4D8",fontWeight:700,fontSize:14}}>{fmt(Number(o.total))}</p>
+    </div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+      <span className="pill" style={{background:STATUS[o.status]?.bg,color:STATUS[o.status]?.color}}>{STATUS[o.status]?.label}</span>
+      <span className="pill" style={{background:o.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:o.paid?"#10b981":"#f59e0b"}}>{o.paid?"Pagado":"Pendiente"}</span>
+      <span style={{fontSize:11,color:"#666"}}>{fmtDate(o.created_at)}</span>
+    </div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+      <button style={btn(o.status==="completed"?"green":"cyan")} onClick={()=>patchOrder(o.id,{status:"completed"})}>✓ Completado</button>
+      <button style={btn(o.paid?"amber":"green")} onClick={()=>patchOrder(o.id,{paid:!o.paid})}>{o.paid?"Sin pagar":"💰 Pagado"}</button>
+      <button style={btn("default")} onClick={()=>downloadFact(o)}>📄 Factura</button>
+      <button style={btn("default")} onClick={()=>{
+        const lines = o.items?.map((i:any)=>`• ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
+        const msg = encodeURIComponent(`📄 *Factura Concepción Tecnología*\n\n👤 ${o.customer_name}\n📦 ${o.delivery_type==="pickup"?"Retira en local":`Envío a: ${o.address}`}\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*\n✅ Estado: ${STATUS[o.status]?.label}`);
+        window.open(`https://wa.me/549${o.phone}?text=${msg}`,"_blank");
+      }}>💬 Factura WSP</button>
+    </div>
+  </div>
+))}
+                
               </div>
             </div>
             {products.filter((p:any)=>p.stock_level==="bajo").length>0&&(
