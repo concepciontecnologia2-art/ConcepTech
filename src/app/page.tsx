@@ -20,7 +20,7 @@ export default function HomePage() {
 
   useEffect(()=>{
   loadData();
-  const interval = setInterval(loadData, 30000);
+  const interval = setInterval(loadData, 1800000);
   return () => {
     clearInterval(interval);
   };
