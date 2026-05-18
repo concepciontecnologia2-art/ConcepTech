@@ -154,6 +154,7 @@ function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; p
     </div>
   );
 }
+
 function Panel({ onLogout }: { onLogout:()=>void }) {
   const [tab, setTab]               = useState<"dashboard"|"orders"|"products">("dashboard");
   const [orders, setOrders]         = useState<any[]>([]);
@@ -166,171 +167,13 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   const [editingProduct, setEditingProduct]   = useState<any|null>(null);
   const [addingProduct, setAddingProduct]     = useState(false);
   const [uploadingId, setUploadingId]         = useState<number|null>(null);
+  const [extraImages, setExtraImages]         = useState<any[]>([]);
+  const [loadingImages, setLoadingImages]     = useState(false);
+  const [importing, setImporting]             = useState(false);
   const [newProduct, setNewProduct] = useState({
     name:"", description:"", category_id:"", price_retail:"", price_wholesale:"",
     stock_level:"alto", stock_quantity:0, available:true, featured:false, is_offer:false, is_new:false, image_url:""
   });
-
-  const uploadPhoto = async(id:number, file:File)=>{
-    setUploadingId(id);
-    const fd = new FormData();
-    fd.append("file", file);
-    try {
-      const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
-      const json = await res.json();
-      if (json.url) await patchProduct(id,{image_url:json.url});
-    } catch(e){ alert("Error al subir la foto"); }
-    setUploadingId(null);
-  };
-
-
-  const [extraImages, setExtraImages] = useState<any[]>([]);
-const [loadingImages, setLoadingImages] = useState(false);
-
-const loadExtraImages = async(productId:number)=>{
-  setLoadingImages(true);
-  const res = await fetch(`/api/products/${productId}/images`,{credentials:"include"});
-  const imgs = await res.json();
-  setExtraImages(Array.isArray(imgs)?imgs:[]);
-  setLoadingImages(false);
-};
-
-const uploadExtraPhoto = async(productId:number, file:File)=>{
-  const fd = new FormData();
-  fd.append("file", file);
-  const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
-  const json = await res.json();
-  if (json.url) {
-    await fetch(`/api/products/${productId}/images`,{
-      method:"POST",credentials:"include",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({image_url:json.url})
-    });
-    await loadExtraImages(productId);
-  }
-};
-
-const deleteExtraPhoto = async(productId:number, imageId:number)=>{
-  await fetch(`/api/products/${productId}/images`,{
-    method:"DELETE",credentials:"include",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({image_id:imageId})
-  });
-  setExtraImages(prev=>prev.filter(i=>i.id!==imageId));
-};
-  const exportExcel = () => {
-  const XLSX = require("xlsx");
-  const data = products.map((p:any)=>({
-    ID: p.id,
-    NOMBRE: p.name,
-    CATEGORIA: p.category_name,
-    PRECIO_MINORISTA: Number(p.price_retail),
-    PRECIO_MAYORISTA: Number(p.price_wholesale),
-    STOCK: p.stock_quantity??0,
-    DISPONIBLE: p.available?"SI":"NO",
-    OFERTA: p.is_offer?"SI":"NO",
-    NOVEDAD: p.is_new?"SI":"NO",
-    STOCK_LEVEL: p.stock_level,
-    IMAGEN: p.image_url||"",
-  }));
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Productos");
-  XLSX.writeFile(wb, `productos-${new Date().toLocaleDateString("es-AR").replace(/\//g,"-")}.xlsx`);
-};
-
-const [importing, setImporting] = useState(false);
-
-const importExcel = async(file:File)=>{
-  setImporting(true);
-  const XLSX = require("xlsx");
-  const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer);
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws) as any[];
-
-  let updated = 0; let created = 0; let err = 0;
-
-  for (const row of rows) {
-    const nombre = (row.DETALLE || row.NOMBRE || "").toString().trim().replace(/^(ZZZ+|WWW+|XXX+|YYY+)\s*/i, "");
-    const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
-    const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
-    const stock     = Number(row.STOCK || 0);
-    const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
-
-    if (!nombre) continue;
-
-    // Buscar si ya existe
-    const prod = products.find((p:any)=>
-      p.name.toUpperCase().trim() === nombre.toUpperCase().trim()
-    );
-
-    if (prod) {
-      // ACTUALIZAR
-      try {
-        await fetch(`/api/products/${prod.id}`,{
-          method:"PATCH",
-          credentials:"include",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            price_retail: precioMin,
-            price_wholesale: precioMay,
-            stock_quantity: stock,
-            stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-          })
-        });
-        updated++;
-      } catch(e){ err++; }
-    } else {
-      // CREAR NUEVO — mapear familia a categoría
-      const familiaMap:Record<string,string> = {
-        "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
-        "TPU FUNDAS Y VIDRIOS":"Celulares y Accesorios","CELULARES":"Celulares y Accesorios",
-        "CABLES":"Cargadores","CARGADORES":"Cargadores",
-        "COMPUTACION":"Computación y Gamer","JUEGOS":"Computación y Gamer","MEMORIA Y PENDRIVE":"Computación y Gamer",
-        "HOGAR":"Electro-Hogar","ELECTRICIDAD":"Electro-Hogar",
-        "LUCES":"Iluminación",
-        "PARLANTES":"Sonido",
-        "PERFUMES":"Perfumería","SAPHIRUS":"Perfumería","SAHUMERIOS":"Perfumería",
-        "MODULOS":"Repuestos","BATERIAS":"Repuestos","PLACA DE CARGA":"Repuestos",
-        "PIN DE CARGA":"Repuestos","TAPA TRASERA":"Repuestos",
-        "HERRAMIENTAS":"Varios","VARIOS":"Varios","BELLEZA":"Varios",
-        "CALCULADORAS":"Varios","RELOJES":"Varios","PILAS":"Varios",
-      };
-      const catName = familiaMap[familia] || "Varios";
-      const cat = categories.find((c:any)=>c.name===catName);
-      if (!cat) { err++; continue; }
-
-      try {
-        await fetch("/api/products",{
-          method:"POST",
-          credentials:"include",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            name: nombre,
-            description: "",
-            category_id: cat.id,
-            price_retail: precioMin,
-            price_wholesale: precioMay,
-            stock_quantity: stock,
-            stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-            available: stock > 0,
-            featured: false,
-            is_offer: false,
-            is_new: false,
-            image_url: null,
-          })
-        });
-        created++;
-      } catch(e){ err++; }
-    }
-  }
-
-  const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
-  setProducts(Array.isArray(updatedProds)?updatedProds:[]);
-  setImporting(false);
-  alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
-};
 
   useEffect(()=>{
     const loadData = () => {
@@ -346,7 +189,7 @@ const importExcel = async(file:File)=>{
       }).catch(()=>setLoading(false));
     };
     loadData();
-    const interval = setInterval(loadData, 15000);
+    const interval = setInterval(loadData, 1800000);
     return ()=>clearInterval(interval);
   },[]);
 
@@ -389,6 +232,189 @@ const importExcel = async(file:File)=>{
     if(!confirm("¿Eliminar este producto?")) return;
     await fetch(`/api/products/${id}`,{method:"DELETE",credentials:"include"});
     setProducts(prev=>prev.filter(p=>p.id!==id));
+  };
+
+  const uploadPhoto = async(id:number, file:File)=>{
+    setUploadingId(id);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+      const json = await res.json();
+      if (json.url) await patchProduct(id,{image_url:json.url});
+    } catch(e){ alert("Error al subir la foto"); }
+    setUploadingId(null);
+  };
+
+  const loadExtraImages = async(productId:number)=>{
+    setLoadingImages(true);
+    const res = await fetch(`/api/products/${productId}/images`,{credentials:"include"});
+    const imgs = await res.json();
+    setExtraImages(Array.isArray(imgs)?imgs:[]);
+    setLoadingImages(false);
+  };
+
+  const uploadExtraPhoto = async(productId:number, file:File)=>{
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+    const json = await res.json();
+    if (json.url) {
+      await fetch(`/api/products/${productId}/images`,{
+        method:"POST",credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({image_url:json.url})
+      });
+      await loadExtraImages(productId);
+    }
+  };
+
+  const deleteExtraPhoto = async(productId:number, imageId:number)=>{
+    await fetch(`/api/products/${productId}/images`,{
+      method:"DELETE",credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({image_id:imageId})
+    });
+    setExtraImages(prev=>prev.filter(i=>i.id!==imageId));
+  };
+
+  const exportExcel = () => {
+    const XLSX = require("xlsx");
+    const data = products.map((p:any)=>({
+      ID: p.id,
+      NOMBRE: p.name,
+      CATEGORIA: p.category_name,
+      PRECIO_MINORISTA: Number(p.price_retail),
+      PRECIO_MAYORISTA: Number(p.price_wholesale),
+      STOCK: p.stock_quantity??0,
+      DISPONIBLE: p.available?"SI":"NO",
+      OFERTA: p.is_offer?"SI":"NO",
+      NOVEDAD: p.is_new?"SI":"NO",
+      STOCK_LEVEL: p.stock_level,
+      IMAGEN: p.image_url||"",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Productos");
+    XLSX.writeFile(wb, `productos-${new Date().toLocaleDateString("es-AR").replace(/\//g,"-")}.xlsx`);
+  };
+
+  const importExcel = async(file:File)=>{
+    setImporting(true);
+    const XLSX = require("xlsx");
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws) as any[];
+
+    let updated = 0; let created = 0; let err = 0;
+
+    for (const row of rows) {
+      const nombre = (row.DETALLE || row.NOMBRE || "").toString().trim().replace(/^(ZZZ+|WWW+|XXX+|YYY+)\s*/i, "");
+      const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+      const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+      const stock     = Number(row.STOCK || 0);
+      const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
+
+      if (!nombre) continue;
+
+      const prod = products.find((p:any)=>
+        p.name.toUpperCase().trim() === nombre.toUpperCase().trim()
+      );
+
+      if (prod) {
+        try {
+          await fetch(`/api/products/${prod.id}`,{
+            method:"PATCH",
+            credentials:"include",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              price_retail: precioMin,
+              price_wholesale: precioMay,
+              stock_quantity: stock,
+              stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+            })
+          });
+          updated++;
+        } catch(e){ err++; }
+      } else {
+        const familiaMap:Record<string,string> = {
+          "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
+          "TPU FUNDAS Y VIDRIOS":"Celulares y Accesorios","CELULARES":"Celulares y Accesorios",
+          "CABLES":"Cargadores","CARGADORES":"Cargadores",
+          "COMPUTACION":"Computación y Gamer","JUEGOS":"Computación y Gamer","MEMORIA Y PENDRIVE":"Computación y Gamer",
+          "HOGAR":"Electro-Hogar","ELECTRICIDAD":"Electro-Hogar",
+          "LUCES":"Iluminación",
+          "PARLANTES":"Sonido",
+          "PERFUMES":"Perfumería","SAPHIRUS":"Perfumería","SAHUMERIOS":"Perfumería",
+          "MODULOS":"Repuestos","BATERIAS":"Repuestos","PLACA DE CARGA":"Repuestos",
+          "PIN DE CARGA":"Repuestos","TAPA TRASERA":"Repuestos",
+          "HERRAMIENTAS":"Varios","VARIOS":"Varios","BELLEZA":"Varios",
+          "CALCULADORAS":"Varios","RELOJES":"Varios","PILAS":"Varios",
+        };
+        const catName = familiaMap[familia] ||
+          (nombre.includes("MODULO") ? "Repuestos" :
+          nombre.includes("BATERIA") ? "Repuestos" :
+          nombre.includes("PLACA DE CARGA") ? "Repuestos" :
+          nombre.includes("PIN DE CARGA") ? "Repuestos" :
+          nombre.includes("TAPA TRASERA") ? "Repuestos" :
+          nombre.includes("AURICULAR") ? "Celulares y Accesorios" :
+          nombre.includes("FUNDA") ? "Celulares y Accesorios" :
+          nombre.includes("VIDRIO") ? "Celulares y Accesorios" :
+          nombre.includes("CABLE") ? "Cargadores" :
+          nombre.includes("CARGADOR") ? "Cargadores" :
+          nombre.includes("CABEZAL") ? "Cargadores" :
+          nombre.includes("PARLANTE") ? "Sonido" :
+          nombre.includes("MICROFONO") ? "Sonido" :
+          nombre.includes("PERFUME") ? "Perfumería" :
+          nombre.includes("SAPHIRUS") ? "Perfumería" :
+          nombre.includes("LUZ") ? "Iluminación" :
+          nombre.includes("FOCO") ? "Iluminación" :
+          nombre.includes("LINTERNA") ? "Iluminación" :
+          nombre.includes("LAMPARA") ? "Iluminación" :
+          nombre.includes("MOUSE") ? "Computación y Gamer" :
+          nombre.includes("TECLADO") ? "Computación y Gamer" :
+          nombre.includes("JOYSTICK") ? "Computación y Gamer" :
+          nombre.includes("CONSOLA") ? "Computación y Gamer" :
+          nombre.includes("ANAFE") ? "Electro-Hogar" :
+          nombre.includes("VENTILADOR") ? "Electro-Hogar" :
+          nombre.includes("BALANZA") ? "Electro-Hogar" :
+          nombre.includes("PILA") ? "Varios" :
+          nombre.includes("RELOJ") ? "Varios" :
+          nombre.includes("CANDADO") ? "Varios" :
+          "Varios");
+        const cat = categories.find((c:any)=>c.name===catName);
+        if (!cat) { err++; continue; }
+
+        try {
+          await fetch("/api/products",{
+            method:"POST",
+            credentials:"include",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              name: nombre,
+              description: "",
+              category_id: cat.id,
+              price_retail: precioMin,
+              price_wholesale: precioMay,
+              stock_quantity: stock,
+              stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+              available: stock > 0,
+              featured: false,
+              is_offer: false,
+              is_new: false,
+              image_url: null,
+            })
+          });
+          created++;
+        } catch(e){ err++; }
+      }
+    }
+
+    const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
+    setProducts(Array.isArray(updatedProds)?updatedProds:[]);
+    setImporting(false);
+    alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
   };
 
   const downloadFact = (order:any) => {
@@ -450,11 +476,6 @@ ${lines}
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#f3f4f6}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px}
-        table{width:100%;border-collapse:collapse}
-        th{text-align:left;font-size:11px;color:#666;font-weight:600;letter-spacing:.06em;padding:9px 13px;border-bottom:1px solid #e5e7eb}
-        td{padding:10px 13px;border-bottom:1px solid #f3f4f6;font-size:13px;vertical-align:middle;color:#1a1a1a}
-        tr:last-child td{border-bottom:none}
-        tr:hover td{background:#f9fafb}
         .pill{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600}
         select{padding:6px 9px;background:#ffffff;border:1px solid #e5e7eb;border-radius:7px;color:#1a1a1a;font-size:12px;outline:none;cursor:pointer;font-family:inherit}
         select option{background:#ffffff;color:#1a1a1a}
@@ -517,29 +538,28 @@ ${lines}
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {orders.slice(0,5).map((o:any)=>(
-  <div key={o.id} style={{padding:"10px 12px",background:"#f9fafb",borderRadius:10,border:"1px solid #e5e7eb"}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-      <p style={{fontWeight:600,color:"#1a1a1a",fontSize:13}}>{o.customer_name}</p>
-      <p style={{color:"#00B4D8",fontWeight:700,fontSize:14}}>{fmt(Number(o.total))}</p>
-    </div>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-      <span className="pill" style={{background:STATUS[o.status]?.bg,color:STATUS[o.status]?.color}}>{STATUS[o.status]?.label}</span>
-      <span className="pill" style={{background:o.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:o.paid?"#10b981":"#f59e0b"}}>{o.paid?"Pagado":"Pendiente"}</span>
-      <span style={{fontSize:11,color:"#666"}}>{fmtDate(o.created_at)}</span>
-    </div>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-      <button style={btn(o.status==="completed"?"green":"cyan")} onClick={()=>patchOrder(o.id,{status:"completed"})}>✓ Completado</button>
-      <button style={btn(o.paid?"amber":"green")} onClick={()=>patchOrder(o.id,{paid:!o.paid})}>{o.paid?"Sin pagar":"💰 Pagado"}</button>
-      <button style={btn("default")} onClick={()=>downloadFact(o)}>📄 Factura</button>
-      <button style={btn("default")} onClick={()=>{
-        const lines = o.items?.map((i:any)=>`• ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
-        const msg = encodeURIComponent(`📄 *Factura Concepción Tecnología*\n\n👤 ${o.customer_name}\n📦 ${o.delivery_type==="pickup"?"Retira en local":`Envío a: ${o.address}`}\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*\n✅ Estado: ${STATUS[o.status]?.label}`);
-        window.open(`https://wa.me/549${o.phone}?text=${msg}`,"_blank");
-      }}>💬 Factura WSP</button>
-    </div>
-  </div>
-))}
-                
+                  <div key={o.id} style={{padding:"10px 12px",background:"#f9fafb",borderRadius:10,border:"1px solid #e5e7eb"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <p style={{fontWeight:600,color:"#1a1a1a",fontSize:13}}>{o.customer_name}</p>
+                      <p style={{color:"#00B4D8",fontWeight:700,fontSize:14}}>{fmt(Number(o.total))}</p>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                      <span className="pill" style={{background:STATUS[o.status]?.bg,color:STATUS[o.status]?.color}}>{STATUS[o.status]?.label}</span>
+                      <span className="pill" style={{background:o.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:o.paid?"#10b981":"#f59e0b"}}>{o.paid?"Pagado":"Pendiente"}</span>
+                      <span style={{fontSize:11,color:"#666"}}>{fmtDate(o.created_at)}</span>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <button style={btn(o.status==="completed"?"green":"cyan")} onClick={()=>patchOrder(o.id,{status:"completed"})}>✓ Completado</button>
+                      <button style={btn(o.paid?"amber":"green")} onClick={()=>patchOrder(o.id,{paid:!o.paid})}>{o.paid?"Sin pagar":"💰 Pagado"}</button>
+                      <button style={btn("default")} onClick={()=>downloadFact(o)}>📄 Factura</button>
+                      <button style={btn("default")} onClick={()=>{
+                        const lines = o.items?.map((i:any)=>`• ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
+                        const msg = encodeURIComponent(`📄 *Factura Concepción Tecnología*\n\n👤 ${o.customer_name}\n📦 ${o.delivery_type==="pickup"?"Retira en local":`Envío a: ${o.address}`}\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*\n✅ Estado: ${STATUS[o.status]?.label}`);
+                        window.open(`https://wa.me/549${o.phone}?text=${msg}`,"_blank");
+                      }}>💬 Factura WSP</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             {products.filter((p:any)=>p.stock_level==="bajo").length>0&&(
@@ -638,27 +658,25 @@ ${lines}
                 setProducts(Array.isArray(updated)?updated:[]);
                 alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
               }}
-            /><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
-  <div>
-    <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Productos</h2>
-    <p style={{color:"#666",fontSize:12}}>{products.length} productos · {products.filter((p:any)=>p.available).length} disponibles</p>
-  </div>
-  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-    <button style={{...btn("default"),padding:"9px 16px",fontSize:13}} onClick={exportExcel}>
-      📊 Exportar
-    </button>
-    <label style={{...btn("cyan"),padding:"9px 16px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-      {importing?"⏳":"📥 Importar"}
-      <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
-        onChange={e=>{const f=e.target.files?.[0]; if(f) importExcel(f); e.target.value="";}}
-        disabled={importing}/>
-    </label>
-    <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar</button>
-  </div>
-</div>
-            
-              
-             
+            />
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
+              <div>
+                <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Productos</h2>
+                <p style={{color:"#666",fontSize:12}}>{products.length} productos · {products.filter((p:any)=>p.available).length} disponibles</p>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button style={{...btn("default"),padding:"9px 16px",fontSize:13}} onClick={exportExcel}>
+                  📊 Exportar
+                </button>
+                <label style={{...btn("cyan"),padding:"9px 16px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                  {importing?"⏳":"📥 Importar"}
+                  <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
+                    onChange={e=>{const f=e.target.files?.[0]; if(f) importExcel(f); e.target.value="";}}
+                    disabled={importing}/>
+                </label>
+                <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar</button>
+              </div>
+            </div>
 
             {/* BÚSQUEDA Y FILTROS */}
             <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
@@ -684,9 +702,9 @@ ${lines}
                   {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
                   <div style={{flex:1,minWidth:0}}>
                     <select value={p.category_id} onChange={e=>patchProduct(p.id,{category_id:Number(e.target.value)})}
-  style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2}}>
-  {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-</select>
+                      style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2}}>
+                      {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                    </select>
                     <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
                     <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
@@ -710,11 +728,11 @@ ${lines}
                       <div className="thumb" style={{left:p.available?18:3}}/>
                     </button>
                     <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-  {uploadingId===p.id?"⏳":"📷"}
-  <input type="file" accept="image/*" style={{display:"none"}}
-    onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPhoto(p.id,f); e.target.value="";}}/>
-</label>
-<button style={btn("cyan")} onClick={()=>setEditingProduct({...p})}>✏️</button>
+                      {uploadingId===p.id?"⏳":"📷"}
+                      <input type="file" accept="image/*" style={{display:"none"}}
+                        onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPhoto(p.id,f); e.target.value="";}}/>
+                    </label>
+                    <button style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>✏️</button>
                     <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
                   </div>
                 </div>
@@ -739,37 +757,41 @@ ${lines}
               <button onClick={()=>setEditingProduct(null)} style={{background:"none",border:"none",color:"#666",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:11}}>
+
+              {/* FOTOS ADICIONALES */}
+              <div>
+                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:8,fontWeight:600}}>FOTOS ADICIONALES</label>
+                {loadingImages ? (
+                  <p style={{fontSize:12,color:"#666"}}>Cargando...</p>
+                ) : (
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
+                    {extraImages.map((img:any)=>(
+                      <div key={img.id} style={{position:"relative",width:70,height:70}}>
+                        <img src={img.image_url} style={{width:70,height:70,borderRadius:8,objectFit:"cover"}}/>
+                        <button onClick={()=>deleteExtraPhoto(editingProduct.id, img.id)}
+                          style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <label style={{width:70,height:70,borderRadius:8,border:"2px dashed #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:24,color:"#999"}}>
+                      +
+                      <input type="file" accept="image/*" style={{display:"none"}}
+                        onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(editingProduct.id,f); e.target.value="";}}/>
+                    </label>
+                  </div>
+                )}
+                <p style={{fontSize:10,color:"#999"}}>Tocá + para agregar más fotos al producto</p>
+              </div>
+
+              {/* CAMPOS */}
               {([["Nombre","name","text"],["Descripción","description","text"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["Stock","stock_quantity","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
                 <div key={key}>
-                  <div>
-  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:8,fontWeight:600}}>FOTOS ADICIONALES</label>
-  {loadingImages ? (
-    <p style={{fontSize:12,color:"#666"}}>Cargando...</p>
-  ) : (
-    <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
-      {extraImages.map((img:any)=>(
-        <div key={img.id} style={{position:"relative",width:70,height:70}}>
-          <img src={img.image_url} style={{width:70,height:70,borderRadius:8,objectFit:"cover"}}/>
-          <button onClick={()=>deleteExtraPhoto(editingProduct.id, img.id)}
-            style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
-            ✕
-          </button>
-        </div>
-      ))}
-      <label style={{width:70,height:70,borderRadius:8,border:"2px dashed #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:24,color:"#999"}}>
-        +
-        <input type="file" accept="image/*" style={{display:"none"}}
-          onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(editingProduct.id,f); e.target.value="";}}/>
-      </label>
-    </div>
-  )}
-  <p style={{fontSize:10,color:"#999"}}>Tocá + para agregar más fotos al producto</p>
-</div>
                   <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>{label.toUpperCase()}</label>
                   <input type={type} style={inp} value={(editingProduct[key]??"")} onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
                 </div>
               ))}
-              
+
               <div>
                 <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
                 <select value={editingProduct.stock_level} onChange={e=>setEditingProduct((p:any)=>({...p,stock_level:e.target.value}))} style={{...inp,cursor:"pointer"}}>
@@ -816,7 +838,7 @@ ${lines}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                 <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK (CANTIDAD)</label>
+                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
                   <input type="number" min="0" style={inp} value={newProduct.stock_quantity} onChange={e=>setNewProduct(p=>({...p,stock_quantity:Number(e.target.value)}))}/>
                 </div>
                 <div>
