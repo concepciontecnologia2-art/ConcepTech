@@ -249,43 +249,87 @@ const importExcel = async(file:File)=>{
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws) as any[];
 
-  let ok = 0; let err = 0; let notFound = 0;
+  let updated = 0; let created = 0; let err = 0;
+
   for (const row of rows) {
-    // Soporta tanto el Excel del cliente como el del panel
     const nombre = (row.DETALLE || row.NOMBRE || "").toString().trim().replace(/^(ZZZ+|WWW+|XXX+|YYY+)\s*/i, "");
     const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
     const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
     const stock     = Number(row.STOCK || 0);
+    const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
 
     if (!nombre) continue;
 
-    // Busca el producto por nombre en los productos ya cargados
+    // Buscar si ya existe
     const prod = products.find((p:any)=>
       p.name.toUpperCase().trim() === nombre.toUpperCase().trim()
     );
 
-    if (!prod) { notFound++; continue; }
+    if (prod) {
+      // ACTUALIZAR
+      try {
+        await fetch(`/api/products/${prod.id}`,{
+          method:"PATCH",
+          credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            price_retail: precioMin,
+            price_wholesale: precioMay,
+            stock_quantity: stock,
+            stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+          })
+        });
+        updated++;
+      } catch(e){ err++; }
+    } else {
+      // CREAR NUEVO — mapear familia a categoría
+      const familiaMap:Record<string,string> = {
+        "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
+        "TPU FUNDAS Y VIDRIOS":"Celulares y Accesorios","CELULARES":"Celulares y Accesorios",
+        "CABLES":"Cargadores","CARGADORES":"Cargadores",
+        "COMPUTACION":"Computación y Gamer","JUEGOS":"Computación y Gamer","MEMORIA Y PENDRIVE":"Computación y Gamer",
+        "HOGAR":"Electro-Hogar","ELECTRICIDAD":"Electro-Hogar",
+        "LUCES":"Iluminación",
+        "PARLANTES":"Sonido",
+        "PERFUMES":"Perfumería","SAPHIRUS":"Perfumería","SAHUMERIOS":"Perfumería",
+        "MODULOS":"Repuestos","BATERIAS":"Repuestos","PLACA DE CARGA":"Repuestos",
+        "PIN DE CARGA":"Repuestos","TAPA TRASERA":"Repuestos",
+        "HERRAMIENTAS":"Varios","VARIOS":"Varios","BELLEZA":"Varios",
+        "CALCULADORAS":"Varios","RELOJES":"Varios","PILAS":"Varios",
+      };
+      const catName = familiaMap[familia] || "Varios";
+      const cat = categories.find((c:any)=>c.name===catName);
+      if (!cat) { err++; continue; }
 
-    try {
-      await fetch(`/api/products/${prod.id}`,{
-        method:"PATCH",
-        credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          price_retail: precioMin,
-          price_wholesale: precioMay,
-          stock_quantity: stock,
-          stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-        })
-      });
-      ok++;
-    } catch(e){ err++; }
+      try {
+        await fetch("/api/products",{
+          method:"POST",
+          credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            name: nombre,
+            description: "",
+            category_id: cat.id,
+            price_retail: precioMin,
+            price_wholesale: precioMay,
+            stock_quantity: stock,
+            stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+            available: stock > 0,
+            featured: false,
+            is_offer: false,
+            is_new: false,
+            image_url: null,
+          })
+        });
+        created++;
+      } catch(e){ err++; }
+    }
   }
 
-  const updated = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
-  setProducts(Array.isArray(updated)?updated:[]);
+  const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
+  setProducts(Array.isArray(updatedProds)?updatedProds:[]);
   setImporting(false);
-  alert(`✅ ${ok} actualizados · ${notFound} no encontrados · ${err>0?`❌ ${err} errores`:""}`);
+  alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
 };
 
   useEffect(()=>{
