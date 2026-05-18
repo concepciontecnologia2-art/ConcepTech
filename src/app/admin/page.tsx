@@ -183,6 +183,76 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     setUploadingId(null);
   };
 
+  const exportExcel = () => {
+  const XLSX = require("xlsx");
+  const data = products.map((p:any)=>({
+    ID: p.id,
+    NOMBRE: p.name,
+    CATEGORIA: p.category_name,
+    PRECIO_MINORISTA: Number(p.price_retail),
+    PRECIO_MAYORISTA: Number(p.price_wholesale),
+    STOCK: p.stock_quantity??0,
+    DISPONIBLE: p.available?"SI":"NO",
+    OFERTA: p.is_offer?"SI":"NO",
+    NOVEDAD: p.is_new?"SI":"NO",
+    STOCK_LEVEL: p.stock_level,
+    IMAGEN: p.image_url||"",
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Productos");
+  XLSX.writeFile(wb, `productos-${new Date().toLocaleDateString("es-AR").replace(/\//g,"-")}.xlsx`);
+};
+
+const [importing, setImporting] = useState(false);
+
+const importExcel = async(file:File)=>{
+  setImporting(true);
+  const XLSX = require("xlsx");
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws) as any[];
+
+  let ok = 0; let err = 0; let notFound = 0;
+  for (const row of rows) {
+    // Soporta tanto el Excel del cliente como el del panel
+    const nombre = (row.DETALLE || row.NOMBRE || "").toString().trim().replace(/^(ZZZ+|WWW+|XXX+|YYY+)\s*/i, "");
+    const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+    const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+    const stock     = Number(row.STOCK || 0);
+
+    if (!nombre) continue;
+
+    // Busca el producto por nombre en los productos ya cargados
+    const prod = products.find((p:any)=>
+      p.name.toUpperCase().trim() === nombre.toUpperCase().trim()
+    );
+
+    if (!prod) { notFound++; continue; }
+
+    try {
+      await fetch(`/api/products/${prod.id}`,{
+        method:"PATCH",
+        credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          price_retail: precioMin,
+          price_wholesale: precioMay,
+          stock_quantity: stock,
+          stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+        })
+      });
+      ok++;
+    } catch(e){ err++; }
+  }
+
+  const updated = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
+  setProducts(Array.isArray(updated)?updated:[]);
+  setImporting(false);
+  alert(`✅ ${ok} actualizados · ${notFound} no encontrados · ${err>0?`❌ ${err} errores`:""}`);
+};
+
   useEffect(()=>{
     const loadData = () => {
       Promise.all([
@@ -489,14 +559,27 @@ ${lines}
                 setProducts(Array.isArray(updated)?updated:[]);
                 alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
               }}
-            />
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
-              <div>
-                <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Productos</h2>
-                <p style={{color:"#666",fontSize:12}}>{products.length} productos · {products.filter((p:any)=>p.available).length} disponibles</p>
-              </div>
-              <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar</button>
-            </div>
+            /><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
+  <div>
+    <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Productos</h2>
+    <p style={{color:"#666",fontSize:12}}>{products.length} productos · {products.filter((p:any)=>p.available).length} disponibles</p>
+  </div>
+  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+    <button style={{...btn("default"),padding:"9px 16px",fontSize:13}} onClick={exportExcel}>
+      📊 Exportar
+    </button>
+    <label style={{...btn("cyan"),padding:"9px 16px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+      {importing?"⏳":"📥 Importar"}
+      <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
+        onChange={e=>{const f=e.target.files?.[0]; if(f) importExcel(f); e.target.value="";}}
+        disabled={importing}/>
+    </label>
+    <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar</button>
+  </div>
+</div>
+            
+              
+             
 
             {/* BÚSQUEDA Y FILTROS */}
             <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
