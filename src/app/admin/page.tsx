@@ -183,6 +183,41 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     setUploadingId(null);
   };
 
+
+  const [extraImages, setExtraImages] = useState<any[]>([]);
+const [loadingImages, setLoadingImages] = useState(false);
+
+const loadExtraImages = async(productId:number)=>{
+  setLoadingImages(true);
+  const res = await fetch(`/api/products/${productId}/images`,{credentials:"include"});
+  const imgs = await res.json();
+  setExtraImages(Array.isArray(imgs)?imgs:[]);
+  setLoadingImages(false);
+};
+
+const uploadExtraPhoto = async(productId:number, file:File)=>{
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+  const json = await res.json();
+  if (json.url) {
+    await fetch(`/api/products/${productId}/images`,{
+      method:"POST",credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({image_url:json.url})
+    });
+    await loadExtraImages(productId);
+  }
+};
+
+const deleteExtraPhoto = async(productId:number, imageId:number)=>{
+  await fetch(`/api/products/${productId}/images`,{
+    method:"DELETE",credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({image_id:imageId})
+  });
+  setExtraImages(prev=>prev.filter(i=>i.id!==imageId));
+};
   const exportExcel = () => {
   const XLSX = require("xlsx");
   const data = products.map((p:any)=>({
@@ -604,7 +639,10 @@ ${lines}
                 <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
                   {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
                   <div style={{flex:1,minWidth:0}}>
-                    <p style={{fontSize:11,color:"#666",marginTop:2}}>{p.category_name}</p>
+                    <select value={p.category_id} onChange={e=>patchProduct(p.id,{category_id:Number(e.target.value)})}
+  style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2}}>
+  {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+</select>
                     <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
                     <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
@@ -659,10 +697,35 @@ ${lines}
             <div style={{display:"flex",flexDirection:"column",gap:11}}>
               {([["Nombre","name","text"],["Descripción","description","text"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["Stock","stock_quantity","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
                 <div key={key}>
+                  <div>
+  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:8,fontWeight:600}}>FOTOS ADICIONALES</label>
+  {loadingImages ? (
+    <p style={{fontSize:12,color:"#666"}}>Cargando...</p>
+  ) : (
+    <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
+      {extraImages.map((img:any)=>(
+        <div key={img.id} style={{position:"relative",width:70,height:70}}>
+          <img src={img.image_url} style={{width:70,height:70,borderRadius:8,objectFit:"cover"}}/>
+          <button onClick={()=>deleteExtraPhoto(editingProduct.id, img.id)}
+            style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
+            ✕
+          </button>
+        </div>
+      ))}
+      <label style={{width:70,height:70,borderRadius:8,border:"2px dashed #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:24,color:"#999"}}>
+        +
+        <input type="file" accept="image/*" style={{display:"none"}}
+          onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(editingProduct.id,f); e.target.value="";}}/>
+      </label>
+    </div>
+  )}
+  <p style={{fontSize:10,color:"#999"}}>Tocá + para agregar más fotos al producto</p>
+</div>
                   <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>{label.toUpperCase()}</label>
                   <input type={type} style={inp} value={(editingProduct[key]??"")} onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
                 </div>
               ))}
+              
               <div>
                 <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
                 <select value={editingProduct.stock_level} onChange={e=>setEditingProduct((p:any)=>({...p,stock_level:e.target.value}))} style={{...inp,cursor:"pointer"}}>

@@ -19,13 +19,27 @@ export default function ProductoPage() {
       .catch(()=>setLoading(false));
   },[id]);
 
-  const GENERIC = "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80";
+const [images, setImages] = useState<string[]>([]);
+const [currentImg, setCurrentImg] = useState(0);
+
+useEffect(()=>{
+  if (!product) return;
+  fetch(`/api/products/${id}/images`)
+    .then(r=>r.json())
+    .then(imgs=>{
+      const urls = [product.image_url, ...imgs.map((i:any)=>i.image_url)].filter(Boolean);
+      setImages(urls);
+    });
+},[product]);
+
 
   const handleWsp = () => {
     if (!product) return;
     const msg = encodeURIComponent(`Hola! Me interesa este producto:\n\n*${product.name}*\nPrecio: ${fmt(Number(product.price_retail))}\nCantidad: ${qty}\n\n¿Tienen stock disponible?`);
     window.open(`https://wa.me/${WA}?text=${msg}`,"_blank");
   };
+
+  const GENERIC = "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80";
 
   if (loading) return (
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif",color:"#666"}}>
@@ -59,10 +73,34 @@ export default function ProductoPage() {
 
       <main style={{maxWidth:600,margin:"0 auto",padding:"32px 20px"}}>
         {/* IMAGEN */}
-        <div style={{borderRadius:16,overflow:"hidden",background:"#f8f8f8",marginBottom:24,aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <img src={product.image_url||GENERIC} alt={product.name}
-            style={{width:"100%",height:"100%",objectFit:"contain"}}/>
-        </div>
+        <div style={{borderRadius:16,overflow:"hidden",background:"#f8f8f8",marginBottom:24,position:"relative",aspectRatio:"1"}}>
+  <img src={images[currentImg]||product.image_url||GENERIC} alt={product.name}
+    style={{width:"100%",height:"100%",objectFit:"contain"}}/>
+  {images.length>1&&(
+    <>
+      <button onClick={()=>setCurrentImg(i=>i===0?images.length-1:i-1)}
+        style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+      <button onClick={()=>setCurrentImg(i=>i===images.length-1?0:i+1)}
+        style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+      <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",display:"flex",gap:6}}>
+        {images.map((_,i)=>(
+          <button key={i} onClick={()=>setCurrentImg(i)}
+            style={{width:i===currentImg?18:6,height:6,borderRadius:10,background:i===currentImg?"#00B4D8":"rgba(255,255,255,.5)",border:"none",cursor:"pointer",padding:0,transition:"all .3s"}}/>
+        ))}
+      </div>
+    </>
+  )}
+</div>
+
+{/* MINIATURAS */}
+{images.length>1&&(
+  <div style={{display:"flex",gap:8,marginBottom:24,overflowX:"auto"}}>
+    {images.map((url,i)=>(
+      <img key={i} src={url} onClick={()=>setCurrentImg(i)}
+        style={{width:60,height:60,borderRadius:8,objectFit:"cover",cursor:"pointer",border:`2px solid ${i===currentImg?"#00B4D8":"#e5e7eb"}`,flexShrink:0}}/>
+    ))}
+  </div>
+)}
 
         {/* INFO */}
         <div style={{marginBottom:8,display:"flex",gap:8,flexWrap:"wrap"}}>
