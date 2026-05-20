@@ -355,6 +355,12 @@ useEffect(()=>{
       <main style={{width:"100%",paddingBottom:100}}>
         <div className="pad" style={{paddingTop:24}}>
 
+          {/* BANNER LINK */}
+<a href="https://concepciontecnologia2-art.github.io/REVISTA-DIGITAL/" target="_blank"
+  style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"12px 20px",background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.25)",borderRadius:12,color:"#00B4D8",fontWeight:700,fontSize:14,textDecoration:"none",marginBottom:14,fontFamily:"inherit"}}>
+  Ingresa aqui y mira todo el fixture del mundial!!!
+</a>
+
           {/* BÚSQUEDA */}
           <div style={{display:"flex",gap:8,marginBottom:14}}>
             <div style={{position:"relative",flex:1,minWidth:0}}>
