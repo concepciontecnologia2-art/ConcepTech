@@ -190,7 +190,9 @@ ${lines}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
                     <button onClick={()=>updateQty(p.id,-1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-                    <span style={{fontSize:13,fontWeight:700,minWidth:16,textAlign:"center",color:"#1a1a1a"}}>{inCart?.qty||0}</span>
+                       <input type="number" min="0" value={inCart?.qty||0}
+  onChange={e=>{const qty=Math.max(0,Number(e.target.value)); setCart(prev=>{const ex=prev.find(i=>i.id===p.id); return ex?prev.map(i=>i.id===p.id?{...i,qty}:i):qty>0?[...prev,{...p,qty}]:prev;});}}
+  style={{width:36,textAlign:"center",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,fontSize:12,padding:"3px 0",fontFamily:"inherit",color:"#1a1a1a",outline:"none",background:"rgba(59,130,246,.04)"}}/>
                     <button onClick={()=>addToCart(p)} disabled={Number(p.stock_quantity)===0} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:Number(p.stock_quantity)===0?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
                   </div>
                   <div style={{textAlign:"right"}}>
