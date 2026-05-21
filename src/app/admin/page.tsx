@@ -175,23 +175,34 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     stock_level:"alto", stock_quantity:0, available:true, featured:false, is_offer:false, is_new:false, image_url:""
   });
 
-  useEffect(()=>{
-    const loadData = () => {
-      Promise.all([
-        fetch("/api/orders",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
-        fetch("/api/products",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
-        fetch("/api/categories",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
-      ]).then(([o,p,c])=>{
-        if(Array.isArray(o)) setOrders(o);
-        if(Array.isArray(p)) setProducts(p);
-        if(Array.isArray(c)) setCategories(c);
-        setLoading(false);
-      }).catch(()=>setLoading(false));
-    };
-    loadData();
-    const interval = setInterval(loadData, 1800000);
-    return ()=>clearInterval(interval);
-  },[]);
+ useEffect(()=>{
+  const loadData = () => {
+    Promise.all([
+      fetch("/api/orders",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
+      fetch("/api/products",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
+      fetch("/api/categories",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
+    ]).then(([o,p,c])=>{
+      if(Array.isArray(o)) setOrders(o);
+      if(Array.isArray(p)) setProducts(p);
+      if(Array.isArray(c)) setCategories(c);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  };
+
+  const loadOrders = () => {
+    fetch("/api/orders",{credentials:"include"}).then(r=>r.ok?r.json():[]).then(o=>{
+      if(Array.isArray(o)) setOrders(o);
+    }).catch(()=>{});
+  };
+
+  loadData();
+  const intervalOrders   = setInterval(loadOrders, 30000);
+  const intervalProducts = setInterval(loadData, 1800000);
+  return ()=>{
+    clearInterval(intervalOrders);
+    clearInterval(intervalProducts);
+  };
+},[]);
 
   const patchOrder = async(id:number,data:any)=>{
     await fetch(`/api/orders/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
@@ -755,15 +766,27 @@ ${lines}
                     <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
                       <div className="thumb" style={{left:p.available?18:3}}/>
                     </button>
-                    <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                      {uploadingId===p.id?"⏳":"📷"}
-                      <input type="file" accept="image/*" multiple style={{display:"none"}}
-  onChange={async e=>{
-    const files = Array.from(e.target.files||[]);
-    for (const f of files) await uploadExtraPhoto(editingProduct.id, f);
-    e.target.value="";
-  }}/>
-                    </label>
+                    <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",minWidth:32,minHeight:28}}>
+  <span>{uploadingId===p.id?"⏳":"📷"}</span>
+  <input type="file" accept="image/*" style={{display:"none"}}
+    onChange={async e=>{
+      const f=e.target.files?.[0];
+      if(!f) return;
+      setUploadingId(p.id);
+      const fd = new FormData();
+      fd.append("file", f);
+      try {
+        const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+        const json = await res.json();
+        if (json.url) {
+          await fetch(`/api/products/${p.id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:json.url})});
+          setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,image_url:json.url}:pp));
+        }
+      } catch(e){ alert("Error al subir"); }
+      setUploadingId(null);
+      e.target.value="";
+    }}/>
+</label>
                     <button style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>✏️</button>
                     <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
                   </div>
