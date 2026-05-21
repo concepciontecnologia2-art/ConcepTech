@@ -235,16 +235,19 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   };
 
   const uploadPhoto = async(id:number, file:File)=>{
-    setUploadingId(id);
-    const fd = new FormData();
-    fd.append("file", file);
-    try {
-      const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
-      const json = await res.json();
-      if (json.url) await patchProduct(id,{image_url:json.url});
-    } catch(e){ alert("Error al subir la foto"); }
-    setUploadingId(null);
-  };
+  setUploadingId(id);
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+    const json = await res.json();
+    if (json.url) {
+      await patchProduct(id,{image_url:json.url});
+      setProducts(prev=>prev.map(p=>p.id===id?{...p,image_url:json.url}:p));
+    }
+  } catch(e){ alert("Error al subir la foto"); }
+  setUploadingId(null);
+};
 
   const loadExtraImages = async(productId:number)=>{
     setLoadingImages(true);
