@@ -737,8 +737,15 @@ ${lines}
                       <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
                       <input type="number" min="0" value={p.stock_quantity??0}
   onChange={e=>setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,stock_quantity:Number(e.target.value)}:pp))}
-  onBlur={e=>patchProduct(p.id,{stock_quantity:Number(e.target.value)})}
-  style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
+    onBlur={e=>{
+  const qty = Number(e.target.value);
+  patchProduct(p.id,{
+    stock_quantity: qty,
+    stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
+    available: qty > 0,
+  });
+}} 
+ style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
                     </div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
