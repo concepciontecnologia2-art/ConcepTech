@@ -134,18 +134,19 @@ useEffect(()=>{
 
         {/* CANTIDAD */}
         {Number(product.stock_quantity)>0&&(
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-            <label style={{fontSize:12,color:"#666",fontWeight:600}}>CANTIDAD:</label>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <button onClick={()=>setQty(q=>Math.max(1,q-1))}
-                style={{width:32,height:32,borderRadius:"50%",border:"1px solid #e5e7eb",background:"#f3f4f6",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-              <span style={{fontSize:16,fontWeight:700,minWidth:24,textAlign:"center"}}>{qty}</span>
-              <button onClick={()=>setQty(q=>q+1)}
-                style={{width:32,height:32,borderRadius:"50%",border:"1px solid #e5e7eb",background:"#f3f4f6",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-            </div>
-          </div>
-        )}
-
+  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+    <label style={{fontSize:12,color:"#666",fontWeight:600}}>CANTIDAD:</label>
+    <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <button onClick={()=>setQty(q=>Math.max(1,q-1))}
+        style={{width:32,height:32,borderRadius:"50%",border:"1px solid #e5e7eb",background:"#f3f4f6",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+      <input type="number" min="1" value={qty}
+        onChange={e=>setQty(Math.max(1,Number(e.target.value)))}
+        style={{width:52,textAlign:"center",border:"1px solid #e5e7eb",borderRadius:8,fontSize:16,fontWeight:700,padding:"4px 0",fontFamily:"inherit",color:"#1a1a1a",outline:"none"}}/>
+      <button onClick={()=>setQty(q=>q+1)}
+        style={{width:32,height:32,borderRadius:"50%",border:"1px solid #e5e7eb",background:"#f3f4f6",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+    </div>
+  </div>
+)}
         {/* BOTONES */}
 <div style={{display:"flex",flexDirection:"column",gap:10}}>
   {Number(product.stock_quantity)>0&&(
