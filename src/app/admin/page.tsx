@@ -278,145 +278,162 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     setExtraImages(prev=>prev.filter(i=>i.id!==imageId));
   };
 
-  const exportExcel = () => {
-    const XLSX = require("xlsx");
-    const data = products.map((p:any)=>({
-      ID: p.id,
-      NOMBRE: p.name,
-      CATEGORIA: p.category_name,
-      PRECIO_MINORISTA: Number(p.price_retail),
-      PRECIO_MAYORISTA: Number(p.price_wholesale),
-      STOCK: p.stock_quantity??0,
-      DISPONIBLE: p.available?"SI":"NO",
-      OFERTA: p.is_offer?"SI":"NO",
-      NOVEDAD: p.is_new?"SI":"NO",
-      STOCK_LEVEL: p.stock_level,
-      IMAGEN: p.image_url||"",
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Productos");
-    XLSX.writeFile(wb, `productos-${new Date().toLocaleDateString("es-AR").replace(/\//g,"-")}.xlsx`);
+ const exportExcel = () => {
+  const XLSX = require("xlsx");
+  const data = products.map((p:any)=>({
+    CODIGO:      "",
+    DETALLE:     p.name,
+    FAMILIA:     p.category_name||"",
+    PROVEEDOR:   "",
+    MARCA:       "",
+    "P.COSTO":   "",
+    "P.VENTA":   Number(p.price_wholesale),
+    IVA:         21,
+    "P.LISTA2":  Number(p.price_retail),
+    "P.LISTA3":  "",
+    "P.MAYOR":   Number(p.price_wholesale),
+    STOCK:       p.stock_quantity??0,
+    "STOCK MIN": "",
+    "STOCK IDEAL": "",
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Productos");
+  XLSX.writeFile(wb, `listado-${new Date().toLocaleDateString("es-AR").replace(/\//g,"-")}.xlsx`);
+};
+ const importExcel = async(file:File)=>{
+  setImporting(true);
+  const XLSX = require("xlsx");
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws) as any[];
+
+  let updated = 0; let created = 0; let err = 0;
+
+  const limpiarNombre = (s:string) =>
+  s.toString().trim()
+   .replace(/\s+/g, " ")
+   .trim()
+   .toUpperCase();
+  const prodMap = new Map<string, any>();
+  products.forEach((p:any) => prodMap.set(limpiarNombre(p.name), p));
+
+  const familiaMap:Record<string,string> = {
+    "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
+    "TPU FUNDAS Y VIDRIOS":"Celulares y Accesorios","CELULARES":"Celulares y Accesorios",
+    "CABLES":"Cargadores","CARGADORES":"Cargadores",
+    "COMPUTACION":"Computación y Gamer","JUEGOS":"Computación y Gamer","MEMORIA Y PENDRIVE":"Computación y Gamer",
+    "HOGAR":"Electro-Hogar","ELECTRICIDAD":"Electro-Hogar",
+    "LUCES":"Iluminación","PARLANTES":"Sonido",
+    "PERFUMES":"Perfumería","SAPHIRUS":"Perfumería","SAHUMERIOS":"Perfumería",
+    "MODULOS":"Repuestos","BATERIAS":"Repuestos","PLACA DE CARGA":"Repuestos",
+    "PIN DE CARGA":"Repuestos","TAPA TRASERA":"Repuestos",
+    "HERRAMIENTAS":"Varios","VARIOS":"Varios","BELLEZA":"Varios",
+    "CALCULADORAS":"Varios","RELOJES":"Varios","PILAS":"Varios",
   };
 
-  const importExcel = async(file:File)=>{
-    setImporting(true);
-    const XLSX = require("xlsx");
-    const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer);
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws) as any[];
+  const inferirCategoria = (nombre:string, familia:string) => {
+    if (familiaMap[familia]) return familiaMap[familia];
+    if (nombre.includes("MODULO")) return "Repuestos";
+    if (nombre.includes("BATERIA")) return "Repuestos";
+    if (nombre.includes("PLACA DE CARGA")) return "Repuestos";
+    if (nombre.includes("PIN DE CARGA")) return "Repuestos";
+    if (nombre.includes("TAPA TRASERA")) return "Repuestos";
+    if (nombre.includes("AURICULAR")) return "Celulares y Accesorios";
+    if (nombre.includes("FUNDA")) return "Celulares y Accesorios";
+    if (nombre.includes("VIDRIO")) return "Celulares y Accesorios";
+    if (nombre.includes("CABLE")) return "Cargadores";
+    if (nombre.includes("CARGADOR")) return "Cargadores";
+    if (nombre.includes("CABEZAL")) return "Cargadores";
+    if (nombre.includes("PARLANTE")) return "Sonido";
+    if (nombre.includes("MICROFONO")) return "Sonido";
+    if (nombre.includes("PERFUME")) return "Perfumería";
+    if (nombre.includes("SAPHIRUS")) return "Perfumería";
+    if (nombre.includes("SAHUMERIO")) return "Perfumería";
+    if (nombre.includes("LUZ")) return "Iluminación";
+    if (nombre.includes("FOCO")) return "Iluminación";
+    if (nombre.includes("LINTERNA")) return "Iluminación";
+    if (nombre.includes("LAMPARA")) return "Iluminación";
+    if (nombre.includes("MOUSE")) return "Computación y Gamer";
+    if (nombre.includes("TECLADO")) return "Computación y Gamer";
+    if (nombre.includes("JOYSTICK")) return "Computación y Gamer";
+    if (nombre.includes("CONSOLA")) return "Computación y Gamer";
+    if (nombre.includes("ANAFE")) return "Electro-Hogar";
+    if (nombre.includes("VENTILADOR")) return "Electro-Hogar";
+    if (nombre.includes("BALANZA")) return "Electro-Hogar";
+    if (nombre.includes("PILA")) return "Varios";
+    if (nombre.includes("RELOJ")) return "Varios";
+    if (nombre.includes("CANDADO")) return "Varios";
+    return "Varios";
+  };
 
-    let updated = 0; let created = 0; let err = 0;
+  for (const row of rows) {
+    const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+    const nombre = limpiarNombre(rawNombre);
+    if (!nombre) continue;
 
-    for (const row of rows) {
-      const nombre = (row.DETALLE || row.NOMBRE || "").toString().trim().replace(/^(ZZZ+|WWW+|XXX+|YYY+)\s*/i, "");
-      const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
-      const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
-      const stock     = Number(row.STOCK || 0);
-      const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
+    const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+    const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+    const stock     = Number(row.STOCK ?? row.stock ?? 0);
+    const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
 
-      if (!nombre) continue;
+    const prod = prodMap.get(nombre);
 
-      const prod = products.find((p:any)=>
-        p.name.toUpperCase().trim() === nombre.toUpperCase().trim()
-      );
-
-      if (prod) {
-        try {
-          await fetch(`/api/products/${prod.id}`,{
-            method:"PATCH",
-            credentials:"include",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({
-              price_retail: precioMin,
-              price_wholesale: precioMay,
-              stock_quantity: stock,
-              stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-            })
-          });
-          updated++;
-        } catch(e){ err++; }
-      } else {
-        const familiaMap:Record<string,string> = {
-          "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
-          "TPU FUNDAS Y VIDRIOS":"Celulares y Accesorios","CELULARES":"Celulares y Accesorios",
-          "CABLES":"Cargadores","CARGADORES":"Cargadores",
-          "COMPUTACION":"Computación y Gamer","JUEGOS":"Computación y Gamer","MEMORIA Y PENDRIVE":"Computación y Gamer",
-          "HOGAR":"Electro-Hogar","ELECTRICIDAD":"Electro-Hogar",
-          "LUCES":"Iluminación",
-          "PARLANTES":"Sonido",
-          "PERFUMES":"Perfumería","SAPHIRUS":"Perfumería","SAHUMERIOS":"Perfumería",
-          "MODULOS":"Repuestos","BATERIAS":"Repuestos","PLACA DE CARGA":"Repuestos",
-          "PIN DE CARGA":"Repuestos","TAPA TRASERA":"Repuestos",
-          "HERRAMIENTAS":"Varios","VARIOS":"Varios","BELLEZA":"Varios",
-          "CALCULADORAS":"Varios","RELOJES":"Varios","PILAS":"Varios",
-        };
-        const catName = familiaMap[familia] ||
-          (nombre.includes("MODULO") ? "Repuestos" :
-          nombre.includes("BATERIA") ? "Repuestos" :
-          nombre.includes("PLACA DE CARGA") ? "Repuestos" :
-          nombre.includes("PIN DE CARGA") ? "Repuestos" :
-          nombre.includes("TAPA TRASERA") ? "Repuestos" :
-          nombre.includes("AURICULAR") ? "Celulares y Accesorios" :
-          nombre.includes("FUNDA") ? "Celulares y Accesorios" :
-          nombre.includes("VIDRIO") ? "Celulares y Accesorios" :
-          nombre.includes("CABLE") ? "Cargadores" :
-          nombre.includes("CARGADOR") ? "Cargadores" :
-          nombre.includes("CABEZAL") ? "Cargadores" :
-          nombre.includes("PARLANTE") ? "Sonido" :
-          nombre.includes("MICROFONO") ? "Sonido" :
-          nombre.includes("PERFUME") ? "Perfumería" :
-          nombre.includes("SAPHIRUS") ? "Perfumería" :
-          nombre.includes("LUZ") ? "Iluminación" :
-          nombre.includes("FOCO") ? "Iluminación" :
-          nombre.includes("LINTERNA") ? "Iluminación" :
-          nombre.includes("LAMPARA") ? "Iluminación" :
-          nombre.includes("MOUSE") ? "Computación y Gamer" :
-          nombre.includes("TECLADO") ? "Computación y Gamer" :
-          nombre.includes("JOYSTICK") ? "Computación y Gamer" :
-          nombre.includes("CONSOLA") ? "Computación y Gamer" :
-          nombre.includes("ANAFE") ? "Electro-Hogar" :
-          nombre.includes("VENTILADOR") ? "Electro-Hogar" :
-          nombre.includes("BALANZA") ? "Electro-Hogar" :
-          nombre.includes("PILA") ? "Varios" :
-          nombre.includes("RELOJ") ? "Varios" :
-          nombre.includes("CANDADO") ? "Varios" :
-          "Varios");
-        const cat = categories.find((c:any)=>c.name===catName);
-        if (!cat) { err++; continue; }
-
-        try {
-          await fetch("/api/products",{
-            method:"POST",
-            credentials:"include",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({
-              name: nombre,
-              description: "",
-              category_id: cat.id,
-              price_retail: precioMin,
-              price_wholesale: precioMay,
-              stock_quantity: stock,
-              stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-              available: stock > 0,
-              featured: false,
-              is_offer: false,
-              is_new: false,
-              image_url: null,
-            })
-          });
+    if (prod) {
+      try {
+        await fetch(`/api/products/${prod.id}`,{
+          method:"PATCH",
+          credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            price_retail:    precioMin > 0 ? precioMin : prod.price_retail,
+            price_wholesale: precioMay > 0 ? precioMay : prod.price_wholesale,
+            stock_quantity:  stock,
+            stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+            available:       stock > 0,
+          })
+        });
+        updated++;
+      } catch(e){ err++; }
+    } else {
+      const catName = inferirCategoria(nombre, familia);
+      const cat = categories.find((c:any)=>c.name===catName) || categories.find((c:any)=>c.name==="Varios");
+if (!cat) { err++; continue; }
+      try {
+        const res = await fetch("/api/products",{
+          method:"POST",
+          credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            name:            nombre,
+            description:     "",
+            category_id:     cat.id,
+            price_retail:    precioMin,
+            price_wholesale: precioMay,
+            stock_quantity:  stock,
+            stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+            available:       stock > 0,
+            featured:        false,
+            is_offer:        false,
+            is_new:          false,
+            image_url:       null,
+          })
+        });
+        if (res.ok) {
+          const newProd = await res.json();
+          prodMap.set(nombre, newProd);
           created++;
-        } catch(e){ err++; }
-      }
+        } else { err++; }
+      } catch(e){ err++; }
     }
+  }
 
-    const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
-    setProducts(Array.isArray(updatedProds)?updatedProds:[]);
-    setImporting(false);
-    alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
-  };
-
+  const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
+  setProducts(Array.isArray(updatedProds)?updatedProds:[]);
+  setImporting(false);
+  alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
+};
   const downloadFact = (order:any) => {
     const lines = order.items?.map((i:any)=>`  • ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
     const txt =
@@ -718,9 +735,10 @@ ${lines}
                         <option value="bajo">🔴 Bajo</option>
                       </select>
                       <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
-                      <input type="number" min="0" defaultValue={p.stock_quantity??0}
-                        onBlur={e=>patchProduct(p.id,{stock_quantity:Number(e.target.value)})}
-                        style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
+                      <input type="number" min="0" value={p.stock_quantity??0}
+  onChange={e=>setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,stock_quantity:Number(e.target.value)}:pp))}
+  onBlur={e=>patchProduct(p.id,{stock_quantity:Number(e.target.value)})}
+  style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
                     </div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
@@ -729,8 +747,12 @@ ${lines}
                     </button>
                     <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
                       {uploadingId===p.id?"⏳":"📷"}
-                      <input type="file" accept="image/*" style={{display:"none"}}
-                        onChange={e=>{const f=e.target.files?.[0]; if(f) uploadPhoto(p.id,f); e.target.value="";}}/>
+                      <input type="file" accept="image/*" multiple style={{display:"none"}}
+  onChange={async e=>{
+    const files = Array.from(e.target.files||[]);
+    for (const f of files) await uploadExtraPhoto(editingProduct.id, f);
+    e.target.value="";
+  }}/>
                     </label>
                     <button style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>✏️</button>
                     <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
