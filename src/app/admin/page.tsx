@@ -172,8 +172,11 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   const [importing, setImporting]             = useState(false);
   const [newProduct, setNewProduct] = useState({
     name:"", description:"", category_id:"", price_retail:"", price_wholesale:"",
-    stock_level:"alto", stock_quantity:0, available:true, featured:false, is_offer:false, is_new:false, image_url:""
+    stock_level:"alto", stock_quantity:"" as any, available:true, featured:false, is_offer:false, is_new:false, image_url:""
   });
+  const [prodPage, setProdPage] = useState(1);
+const PRODS_PER_PAGE = 50;
+
 
  useEffect(()=>{
   const loadData = () => {
@@ -214,30 +217,46 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     if(res.ok) setProducts(prev=>prev.map(p=>p.id===id?{...p,...data}:p));
   };
 
-  const saveEditProduct = async()=>{
-    if(!editingProduct) return;
-    await fetch(`/api/products/${editingProduct.id}`,{method:"PUT",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(editingProduct)});
-    setProducts(prev=>prev.map(p=>p.id===editingProduct.id?editingProduct:p));
-    setEditingProduct(null);
+ const saveEditProduct = async()=>{
+  if(!editingProduct) return;
+  const qty = Number(editingProduct.stock_quantity);
+  const updated = {
+    ...editingProduct,
+    stock_quantity: qty,
+    stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
+    available: qty > 0,
   };
+  await fetch(`/api/products/${editingProduct.id}`,{method:"PUT",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(updated)});
+  setProducts(prev=>prev.map(p=>p.id===editingProduct.id?{...p,...updated}:p));
+  setEditingProduct(null);
+};
 
-  const saveNewProduct = async()=>{
-    if(!newProduct.name||!newProduct.category_id||!newProduct.price_retail||!newProduct.price_wholesale){
-      alert("Completá los campos obligatorios"); return;
-    }
-    const res = await fetch("/api/products",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      ...newProduct,
-      category_id:Number(newProduct.category_id),
-      price_retail:Number(newProduct.price_retail),
-      price_wholesale:Number(newProduct.price_wholesale),
-      stock_quantity:Number(newProduct.stock_quantity),
-    })});
-    const p = await res.json();
-    const cat = categories.find((c:any)=>c.id===Number(newProduct.category_id));
-    setProducts(prev=>[...prev,{...p,category_name:cat?.name||""}]);
-    setAddingProduct(false);
-    setNewProduct({name:"",description:"",category_id:"",price_retail:"",price_wholesale:"",stock_level:"alto",stock_quantity:0,available:true,featured:false,is_offer:false,is_new:false,image_url:""});
-  };
+ const saveNewProduct = async()=>{
+  if(!newProduct.name||!newProduct.category_id||!newProduct.price_retail||!newProduct.price_wholesale){
+    alert("Completá los campos obligatorios"); return;
+  }
+  const qty = Number(newProduct.stock_quantity)||0;
+  const res = await fetch("/api/products",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    ...newProduct,
+    category_id:    Number(newProduct.category_id),
+    price_retail:   Number(newProduct.price_retail),
+    price_wholesale:Number(newProduct.price_wholesale),
+    stock_quantity:  qty,
+    stock_level:     qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
+    available:       qty > 0,
+  })});
+  const p = await res.json();
+  const cat = categories.find((c:any)=>c.id===Number(newProduct.category_id));
+  setProducts(prev=>[...prev,{
+    ...p,
+    category_name:   cat?.name||"",
+    stock_quantity:  qty,
+    stock_level:     qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
+    available:       qty > 0,
+  }]);
+  setAddingProduct(false);
+  setNewProduct({name:"",description:"",category_id:"",price_retail:"",price_wholesale:"",stock_level:"alto",stock_quantity:"" as any,available:true,featured:false,is_offer:false,is_new:false,image_url:""});
+};
 
   const deleteProduct = async(id:number)=>{
     if(!confirm("¿Eliminar este producto?")) return;
@@ -484,9 +503,12 @@ ${lines}
   const totalPending = orders.filter(o=>!o.paid&&o.status!=="cancelled").reduce((s,o)=>s+Number(o.total),0);
   const pendingCount = orders.filter(o=>o.status==="pending").length;
   const uniqueCats   = [...new Set(products.map((p:any)=>p.category_name))];
-  const filteredProds= products
-    .filter((p:any)=>catFilter==="all"||p.category_name===catFilter)
-    .filter((p:any)=>!searchProd||p.name.toLowerCase().includes(searchProd.toLowerCase()));
+  const filteredProds = products
+  .filter((p:any)=>catFilter==="all"||p.category_name===catFilter)
+  .filter((p:any)=>!searchProd||p.name.toLowerCase().includes(searchProd.toLowerCase()));
+
+const filteredProdsPaged = filteredProds.slice(0, prodPage * PRODS_PER_PAGE);
+const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
 
   const card = {background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:13,padding:"16px 18px"};
   const btn = (v:string) => {
@@ -713,13 +735,13 @@ ${lines}
             <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
               <div style={{position:"relative",flex:1,minWidth:180}}>
                 <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13}}>🔍</span>
-                <input value={searchProd} onChange={e=>setSearchProd(e.target.value)} placeholder="Buscar producto..."
+                <input value={searchProd} onChange={e=>{setSearchProd(e.target.value); setProdPage(1);}} placeholder="Buscar producto..."
                   style={{width:"100%",padding:"8px 10px 8px 30px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,fontSize:12,outline:"none",fontFamily:"inherit",color:"#1a1a1a"}}/>
               </div>
             </div>
             <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
               {["all",...uniqueCats].map(c=>(
-                <button key={c as string} onClick={()=>setCatFilter(c as string)}
+                <button key={c as string} onClick={()=>{setCatFilter(c as string); setProdPage(1);}}
                   style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${catFilter===c?"rgba(0,180,216,.4)":"#e5e7eb"}`,background:catFilter===c?"rgba(0,180,216,.1)":"#ffffff",color:catFilter===c?"#00B4D8":"#444",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
                   {c==="all"?"Todos":c as string}
                 </button>
@@ -728,7 +750,7 @@ ${lines}
 
             {/* LISTA DE PRODUCTOS */}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {filteredProds.map((p:any)=>(
+              {filteredProdsPaged.map((p:any)=>(
                 <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
                   {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
                   <div style={{flex:1,minWidth:0}}>
@@ -758,6 +780,12 @@ ${lines}
     stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
     available: qty > 0,
   });
+  {hasMoreProds&&(
+  <button onClick={()=>setProdPage(p=>p+1)}
+    style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#00B4D8",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+    Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
+  </button>
+)}
 }} 
  style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
                     </div>
@@ -792,6 +820,12 @@ ${lines}
                   </div>
                 </div>
               ))}
+              {hasMoreProds&&(
+  <button onClick={()=>setProdPage(p=>p+1)}
+    style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#00B4D8",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+    Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
+  </button>
+)}
             </div>
           </div>
         )}
@@ -843,7 +877,10 @@ ${lines}
               {([["Nombre","name","text"],["Descripción","description","text"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["Stock","stock_quantity","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
                 <div key={key}>
                   <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>{label.toUpperCase()}</label>
-                  <input type={type} style={inp} value={(editingProduct[key]??"")} onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
+                   <input type={type} style={inp} 
+  value={type==="number"&&(editingProduct[key]===0||editingProduct[key]==="0")?"":editingProduct[key]??""} 
+  placeholder={type==="number"?"0":""}
+  onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
                 </div>
               ))}
 
@@ -894,7 +931,8 @@ ${lines}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
                 <div>
                   <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
-                  <input type="number" min="0" style={inp} value={newProduct.stock_quantity} onChange={e=>setNewProduct(p=>({...p,stock_quantity:Number(e.target.value)}))}/>
+                  <input type="number" min="0" style={inp}value={newProduct.stock_quantity||""}
+placeholder="0" onChange={e=>setNewProduct(p=>({...p,stock_quantity:Number(e.target.value)}))}/>
                 </div>
                 <div>
                   <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
