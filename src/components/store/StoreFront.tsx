@@ -474,7 +474,7 @@ useEffect(()=>{
           <div>
             <p style={{fontFamily:"'Syne',sans-serif",fontSize:15,fontWeight:800,color:"#1a1a1a",marginBottom:4}}><span style={{color:"#00B4D8"}}>Concepción</span> Tecnología</p>
             <p style={{fontSize:12,color:"#666"}}>{"📍 Independencia 450, Concepción, Tucumán"}</p>
-            <p style={{fontSize:12,color:"#666",marginTop:2}}>{"🕐 Lunes a Viernes: 9-12 y 16-20hs · Sábados: 9-13hs"}</p>
+            <p style={{fontSize:12,color:"#666",marginTop:2}}>{"🕐 Lunes a Viernes: 9-12 y 16-20hs · Sábados: 9-15hs"}</p>
           </div>
           <div style={{display:"flex",gap:10}}>
             {[
