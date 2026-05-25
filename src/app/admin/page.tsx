@@ -346,6 +346,7 @@ const PRODS_PER_PAGE = 50;
 
   const limpiarNombre = (s:string) =>
   s.toString().trim()
+   .replace(/^(Z{2,}|W{2,}|X{2,}|Y{2,})\s*/i, "")
    .replace(/\s+/g, " ")
    .trim()
    .toUpperCase();
