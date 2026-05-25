@@ -401,67 +401,84 @@ const PRODS_PER_PAGE = 50;
     if (nombre.includes("CANDADO")) return "Varios";
     return "Varios";
   };
+  // PRIMERA PASADA — actualizar existentes
+for (const row of rows) {
+  const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+  const nombre = limpiarNombre(rawNombre);
+  if (!nombre) continue;
 
-  for (const row of rows) {
-    const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
-    const nombre = limpiarNombre(rawNombre);
-    if (!nombre) continue;
+  const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+  const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+  const stock     = Number(row.STOCK ?? row.stock ?? 0);
+  const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
 
-    const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
-    const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
-    const stock     = Number(row.STOCK ?? row.stock ?? 0);
-    const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
+  const prod = prodMap.get(nombre);
 
-    const prod = prodMap.get(nombre);
-
-    if (prod) {
-      try {
-        await fetch(`/api/products/${prod.id}`,{
-          method:"PATCH",
-          credentials:"include",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            price_retail:    precioMin > 0 ? precioMin : prod.price_retail,
-            price_wholesale: precioMay > 0 ? precioMay : prod.price_wholesale,
-            stock_quantity:  stock,
-            stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-            available:       stock > 0,
-          })
-        });
-        updated++;
-      } catch(e){ err++; }
-    } else {
-      const catName = inferirCategoria(nombre, familia);
-      const cat = categories.find((c:any)=>c.name===catName) || categories.find((c:any)=>c.name==="Varios");
-if (!cat) { err++; continue; }
-      try {
-        const res = await fetch("/api/products",{
-          method:"POST",
-          credentials:"include",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            name:            nombre,
-            description:     "",
-            category_id:     cat.id,
-            price_retail:    precioMin,
-            price_wholesale: precioMay,
-            stock_quantity:  stock,
-            stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-            available:       stock > 0,
-            featured:        false,
-            is_offer:        false,
-            is_new:          false,
-            image_url:       null,
-          })
-        });
-        if (res.ok) {
-          const newProd = await res.json();
-          prodMap.set(nombre, newProd);
-          created++;
-        } else { err++; }
-      } catch(e){ err++; }
-    }
+  if (prod) {
+    try {
+      await fetch(`/api/products/${prod.id}`,{
+        method:"PATCH",
+        credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          price_retail:    precioMin > 0 ? precioMin : prod.price_retail,
+          price_wholesale: precioMay > 0 ? precioMay : prod.price_wholesale,
+          stock_quantity:  stock,
+          stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+          available:       stock > 0,
+        })
+      });
+      updated++;
+    } catch(e){ err++; }
   }
+}
+
+// SEGUNDA PASADA — crear nuevos con stock correcto
+for (const row of rows) {
+  const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+  const nombre = limpiarNombre(rawNombre);
+  if (!nombre) continue;
+
+  const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+  const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+  const stock     = Number(row.STOCK ?? row.stock ?? 0);
+  const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
+
+  const prod = prodMap.get(nombre);
+  if (prod) continue; // ya existe, se actualizó en la primera pasada
+
+  const catName = inferirCategoria(nombre, familia);
+  const cat = categories.find((c:any)=>c.name===catName) || categories.find((c:any)=>c.name==="Varios");
+  if (!cat) { err++; continue; }
+
+  try {
+    const res = await fetch("/api/products",{
+      method:"POST",
+      credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        name:            nombre,
+        description:     "",
+        category_id:     cat.id,
+        price_retail:    precioMin,
+        price_wholesale: precioMay,
+        stock_quantity:  stock,
+        stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+        available:       stock > 0,
+        featured:        false,
+        is_offer:        false,
+        is_new:          false,
+        image_url:       null,
+      })
+    });
+    if (res.ok) {
+      const newProd = await res.json();
+      prodMap.set(nombre, newProd);
+      created++;
+    } else { err++; }
+  } catch(e){ err++; }
+}
+
 
   const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
   setProducts(Array.isArray(updatedProds)?updatedProds:[]);
