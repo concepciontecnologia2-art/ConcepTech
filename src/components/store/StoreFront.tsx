@@ -132,7 +132,6 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
           <p style={{fontSize:12,fontWeight:600,color:"#1a1a1a",lineHeight:1.3}}>{p.name}</p>
           {p.description&&<p style={{fontSize:10,color:"#666",lineHeight:1.4,flex:1,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.description}</p>}
           <p style={{fontSize:16,fontWeight:800,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</p>
-          {Number(p.stock_quantity)>0&&Number(p.stock_quantity)<=10&&(
             <p style={{fontSize:10,fontWeight:700,marginBottom:4,color:
   Number(p.stock_quantity)===0?"#ef4444":
   Number(p.stock_quantity)<=3?"#ef4444":
@@ -142,7 +141,6 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
    Number(p.stock_quantity)<=10?`🟡 ${p.stock_quantity} u.`:
    `🟢 ${p.stock_quantity} u.`}
 </p>
-          )}
 
            {Number(p.stock_quantity)>0&&(
   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
