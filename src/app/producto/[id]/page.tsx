@@ -123,14 +123,14 @@ useEffect(()=>{
           {fmt(Number(product.price_retail))}
         </p>
 
-        <p style={{fontSize:12,fontWeight:700,marginBottom:12,color:
+        <p style={{fontSize:13,fontWeight:700,marginBottom:12,color:
   Number(product.stock_quantity)===0?"#ef4444":
   Number(product.stock_quantity)<=3?"#ef4444":
   Number(product.stock_quantity)<=10?"#f59e0b":"#10b981"}}>
   {Number(product.stock_quantity)===0?"🔴 Sin stock":
    Number(product.stock_quantity)<=3?`🔴 Últimas ${product.stock_quantity} unidades`:
-   Number(product.stock_quantity)<=10?`🟡 Stock: ${product.stock_quantity} unidades`:
-   `🟢 Stock disponible: ${product.stock_quantity} unidades`}
+   Number(product.stock_quantity)<=10?`🟡 ${product.stock_quantity} unidades disponibles`:
+   `🟢 ${product.stock_quantity} unidades disponibles`}
 </p>
 
         {/* CANTIDAD */}

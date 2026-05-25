@@ -133,7 +133,15 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
           {p.description&&<p style={{fontSize:10,color:"#666",lineHeight:1.4,flex:1,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.description}</p>}
           <p style={{fontSize:16,fontWeight:800,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</p>
           {Number(p.stock_quantity)>0&&Number(p.stock_quantity)<=10&&(
-            <p style={{fontSize:10,fontWeight:700,color:"#ef4444"}}>{"⚠️ ÚLTIMAS "}{p.stock_quantity}{" UNIDADES"}</p>
+            <p style={{fontSize:10,fontWeight:700,marginBottom:4,color:
+  Number(p.stock_quantity)===0?"#ef4444":
+  Number(p.stock_quantity)<=3?"#ef4444":
+  Number(p.stock_quantity)<=10?"#f59e0b":"#10b981"}}>
+  {Number(p.stock_quantity)===0?"🔴 Sin stock":
+   Number(p.stock_quantity)<=3?`🔴 ${p.stock_quantity} u.`:
+   Number(p.stock_quantity)<=10?`🟡 ${p.stock_quantity} u.`:
+   `🟢 ${p.stock_quantity} u.`}
+</p>
           )}
 
            {Number(p.stock_quantity)>0&&(
