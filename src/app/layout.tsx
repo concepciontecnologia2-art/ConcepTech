@@ -13,7 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="manifest" href="/manifest.json" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Concepción Tecnología" />
-<link rel="apple-touch-icon" href="/images/logo.png" />
+<link rel="apple-touch-icon" href="/images/logo.png"/>
       </head>
       <body>{children}</body>
     </html>
