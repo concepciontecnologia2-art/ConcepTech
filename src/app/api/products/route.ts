@@ -34,10 +34,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const b = await req.json();
   const [p] = await query(
-    `INSERT INTO products (name,description,category_id,subcategory_id,price_retail,price_wholesale,available,featured,is_offer,is_new,stock_level,image_url)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    `INSERT INTO products (name,description,category_id,subcategory_id,price_retail,price_wholesale,available,featured,is_offer,is_new,stock_level,stock_quantity,image_url)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     [b.name,b.description||null,b.category_id,b.subcategory_id||null,b.price_retail,b.price_wholesale,
-     b.available??true,b.featured??false,b.is_offer??false,b.is_new??false,b.stock_level||"alto",b.image_url||null]
+     b.available??true,b.featured??false,b.is_offer??false,b.is_new??false,b.stock_level||"alto",b.stock_quantity??0,b.image_url||null]
   );
   return NextResponse.json(p, { status: 201 });
 }

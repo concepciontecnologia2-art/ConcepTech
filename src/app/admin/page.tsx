@@ -983,6 +983,17 @@ export default function AdminPage() {
   const [authed, setAuthed] = useState<boolean|null>(null);
 
   useEffect(()=>{
+  const existing = document.querySelector("link[rel='manifest']");
+  if (existing) existing.remove();
+  return ()=>{
+    const link = document.createElement("link");
+    link.rel = "manifest";
+    link.href = "/manifest.json";
+    document.head.appendChild(link);
+  };
+},[]);
+
+  useEffect(()=>{
     fetch("/api/auth/check",{credentials:"include"})
       .then(r=>r.json())
       .then(d=>setAuthed(!!d.ok))
