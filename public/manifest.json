@@ -1,7 +1,7 @@
 {
-  "name": "ConcepTech Admin",
-  "short_name": "CT Admin",
-  "start_url": "/admin",
+  "name": "Concepción Tecnología",
+  "short_name": "ConcepTech",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#00B4D8",
