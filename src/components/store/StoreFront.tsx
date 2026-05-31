@@ -300,6 +300,35 @@ useEffect(()=>{
     );
   };
 
+  const InstallButton = () => {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(()=>{
+    const handler = (e:any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setVisible(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return ()=>window.removeEventListener("beforeinstallprompt", handler);
+  },[]);
+
+  if (!visible) return null;
+
+  return (
+    <button onClick={async()=>{
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      setVisible(false);
+    }}
+      style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:20,color:"#00B4D8",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",margin:"8px auto 0",width:"fit-content"}}>
+      📲 Instalar app
+    </button>
+  );
+};
+
   return (
     <div style={{minHeight:"100vh",background:"#ffffff",color:"#1a1a1a",fontFamily:"'DM Sans',system-ui,sans-serif",overflowX:"hidden",width:"100%"}}>
       <style>{`
@@ -341,6 +370,9 @@ useEffect(()=>{
         @media(min-width:480px){.banner-grid{grid-template-columns:repeat(2,1fr)}}
         @media(min-width:768px){.banner-grid{grid-template-columns:repeat(3,1fr)}}
       `}</style>
+
+      {/* BOTÓN INSTALAR APP */}
+<InstallButton/>
 
       {/* HEADER */}
       <header style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,borderBottom:"1px solid #e5e7eb",background:"#ffffff",padding:"10px 0"}}>
