@@ -379,8 +379,6 @@ useEffect(()=>{
         @media(min-width:768px){.banner-grid{grid-template-columns:repeat(3,1fr)}}
       `}</style>
 
-      {/* BOTÓN INSTALAR APP */}
-<InstallButton/>
 
       {/* HEADER */}
       <header style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,borderBottom:"1px solid #e5e7eb",background:"#ffffff",padding:"10px 0"}}>
@@ -414,8 +412,9 @@ useEffect(()=>{
         <div className="pad" style={{paddingTop:24}}>
 
            {/* BOTÓN INSTALAR APP */}
-<InstallButton/>
-
+<div style={{display:"flex",justifyContent:"center",padding:"8px 0 0"}}>
+  <InstallButton/>
+</div>
           {/* BANNER LINK */}
 <a href="https://concepciontecnologia2-art.github.io/REVISTA-DIGITAL/" target="_blank"
   style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"12px 20px",background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.25)",borderRadius:12,color:"#00B4D8",fontWeight:700,fontSize:14,textDecoration:"none",marginBottom:14,fontFamily:"inherit"}}>
