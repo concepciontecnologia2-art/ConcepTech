@@ -300,37 +300,62 @@ useEffect(()=>{
     );
   };
 
- const InstallButton = () => {
+const InstallButton = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSHelp, setShowIOSHelp] = useState(false);
+  const [installed, setInstalled] = useState(false);
 
   useEffect(()=>{
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     setIsIOS(ios);
-    const handler = (e:any) => { e.preventDefault(); setDeferredPrompt(e); };
+
+    // Verificar si ya está instalada
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setInstalled(true);
+      return;
+    }
+
+    const handler = (e:any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
     window.addEventListener("beforeinstallprompt", handler);
     return ()=>window.removeEventListener("beforeinstallprompt", handler);
   },[]);
 
+  if (installed) return null;
+
+  const handleClick = async() => {
+    if (isIOS) { setShowIOSHelp(true); return; }
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === "accepted") setInstalled(true);
+      setDeferredPrompt(null);
+    } else {
+      // Android 14 fallback — abrir instrucciones manuales
+      setShowIOSHelp(true);
+    }
+  };
+
   return (
     <>
-      <button onClick={async()=>{
-        if (isIOS) { setShowIOSHelp(true); return; }
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-      }}
-        style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:20,color:"#00B4D8",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",margin:"8px auto 0",width:"fit-content"}}>
+      <button onClick={handleClick}
+        style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:20,color:"#00B4D8",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
         📲 Instalar app
       </button>
       {showIOSHelp&&(
         <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:20}} onClick={()=>setShowIOSHelp(false)}>
           <div style={{background:"#ffffff",borderRadius:16,padding:24,width:"100%",maxWidth:400}} onClick={e=>e.stopPropagation()}>
-            <p style={{fontWeight:700,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>Instalar en iPhone</p>
-            <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:8}}>1. Tocá el botón <strong>compartir</strong> ⬆️ en Safari</p>
-            <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:16}}>2. Seleccioná <strong>"Agregar a pantalla de inicio"</strong></p>
-            <button onClick={()=>setShowIOSHelp(false)} style={{width:"100%",padding:12,borderRadius:10,background:"#00B4D8",border:"none",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}}>Entendido</button>
+            <p style={{fontWeight:700,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>Instalá la app</p>
+            <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:6}}>
+              {isIOS ? "1. Tocá el botón compartir ⬆️ en Safari" : "1. Tocá los 3 puntos ⋮ en Chrome"}
+            </p>
+            <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:16}}>
+              {isIOS ? '2. Seleccioná "Agregar a pantalla de inicio"' : '2. Seleccioná "Agregar a pantalla de inicio"'}
+            </p>
+            <button onClick={()=>setShowIOSHelp(false)} style={{width:"100%",padding:12,borderRadius:10,background:"#00B4D8",border:"none",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Entendido</button>
           </div>
         </div>
       )}
