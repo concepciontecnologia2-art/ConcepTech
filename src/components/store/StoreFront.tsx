@@ -228,9 +228,10 @@ useEffect(() => {
   return () => clearInterval(interval);
 }, [images.length]);
 
-const containerRef = useRef(null);
+const containerRef = useRef<HTMLDivElement>(null);
 
 useEffect(() => {
+  // TypeScript ahora reconoce containerRef.current como un HTMLDivElement
   if (containerRef.current) {
     const width = containerRef.current.clientWidth;
     containerRef.current.scrollTo({
