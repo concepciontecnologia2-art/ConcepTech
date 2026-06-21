@@ -179,19 +179,55 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
     );
   };
 
-  const Carrusel = ({ images }: { images: { src:string; alt:string }[] }) => {
-    const [current, setCurrent] = useState(0);
-    const [isMobile, setIsMobile] = useState(false);
-    const touchStartX = useRef(0);
-    const touchStartY = useRef(0);
-    const isDragging = useRef(false);
+ const Carrusel = ({ images }: { images: { src: string; alt: string }[] }) => {
+  const [current, setCurrent] = useState(0);
 
-    useEffect(()=>{
-      const check = () => setIsMobile(window.innerWidth < 768);
-      check();
-      window.addEventListener("resize", check);
-      return () => window.removeEventListener("resize", check);
-    },[]);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrent(prev => (prev + 1) % images.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [images.length]);
+
+  return (
+    <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", borderRadius: 14, overflow: "hidden", background: "#000" }}>
+      {images.map((img, i) => (
+        <img
+          key={i}
+          src={img.src}
+          alt={img.alt}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity: i === current ? 1 : 0,
+            transition: "opacity 0.6s ease",
+          }}
+        />
+      ))}
+      <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6 }}>
+        {images.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setCurrent(i)}
+            style={{
+              width: i === current ? 18 : 6,
+              height: 6,
+              borderRadius: 10,
+              background: i === current ? "#00B4D8" : "rgba(255,255,255,.5)",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              transition: "all .3s",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
 
     useEffect(()=>{
   if (!products.length) return;
