@@ -38,16 +38,32 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
   },[]);
 
 
-  useEffect(()=>{
-  if (!registered) return;
+ useEffect(()=>{
+  if (!registered || products.length === 0) return;
   const hash = window.location.hash;
   if (!hash.startsWith("#producto-")) return;
   const id = hash.replace("#producto-","");
-  setTimeout(()=>{
+  
+  // Esperar que el DOM renderice los productos
+  const intentar = (intentos = 0) => {
     const el = document.getElementById(`producto-${id}`);
-    if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
-  }, 800);
-},[registered]);
+    if (el) {
+      el.scrollIntoView({behavior:"smooth", block:"center"});
+      // Destacar el producto visualmente
+      el.style.border = "2px solid #3b82f6";
+      el.style.boxShadow = "0 0 0 4px rgba(59,130,246,.2)";
+      setTimeout(()=>{
+        el.style.border = "";
+        el.style.boxShadow = "";
+      }, 2000);
+    } else if (intentos < 10) {
+      setTimeout(()=>intentar(intentos + 1), 300);
+    }
+  };
+  
+  setTimeout(()=>intentar(), 500);
+},[registered, products]);
+
 
   const handleRegister = async () => {
     if (!regForm.name||!regForm.phone) { setRegError("Completá todos los campos"); return; }
