@@ -160,6 +160,10 @@ useEffect(()=>{
     style={{width:"100%",padding:14,background:"#25D366",border:"none",borderRadius:12,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
     💬 Consultar por WhatsApp
   </button>
+  <a href={`/mayorista#producto-${id}`}
+  style={{width:"100%",padding:14,background:"rgba(59,130,246,.1)",border:"1px solid rgba(59,130,246,.3)",borderRadius:12,color:"#3b82f6",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,textDecoration:"none",marginBottom:8}}>
+  📦 Ver precio mayorista
+</a>
   <a href="/"
     style={{width:"100%",padding:14,background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:12,color:"#00B4D8",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,textDecoration:"none"}}>
     ← Ver todos los productos

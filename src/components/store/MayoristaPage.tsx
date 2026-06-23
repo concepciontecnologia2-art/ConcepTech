@@ -37,6 +37,18 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
     }
   },[]);
 
+
+  useEffect(()=>{
+  if (!registered) return;
+  const hash = window.location.hash;
+  if (!hash.startsWith("#producto-")) return;
+  const id = hash.replace("#producto-","");
+  setTimeout(()=>{
+    const el = document.getElementById(`producto-${id}`);
+    if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
+  }, 800);
+},[registered]);
+
   const handleRegister = async () => {
     if (!regForm.name||!regForm.phone) { setRegError("Completá todos los campos"); return; }
     setRegLoading(true);
@@ -182,7 +194,7 @@ ${lines}
         {visible.map(p=>{
           const inCart=cart.find((i:any)=>i.id===p.id);
           return (
-            <div key={p.id} style={{background:"#ffffff",border:`1px solid ${inCart?"rgba(59,130,246,.4)":"#e5e7eb"}`,borderRadius:14,overflow:"hidden",transition:"all .25s"}}>
+            <div key={p.id} id={`producto-${p.id}`} style={{background:"#ffffff",border:`1px solid ${inCart?"rgba(59,130,246,.4)":"#e5e7eb"}`,borderRadius:14,overflow:"hidden",transition:"all .25s"}}>
               <ProductImageCarousel productId={p.id} mainImage={p.image_url}/>
               <div style={{padding:"12px 13px"}}>
                 <p style={{fontSize:12,fontWeight:600,color:"#1a1a1a",lineHeight:1.3,marginBottom:4}}>{p.name}</p>

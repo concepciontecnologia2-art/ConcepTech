@@ -153,6 +153,11 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
       style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
   </div>
 )}
+<a href={`/mayorista#producto-${p.id}`} 
+  onClick={e=>e.stopPropagation()}
+  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,width:"100%",padding:"7px",borderRadius:8,background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.25)",color:"#3b82f6",fontSize:11,fontWeight:600,textDecoration:"none",marginBottom:6}}>
+  📦 Ver precio mayorista
+</a>
 <button onClick={e=>{e.stopPropagation(); Number(p.stock_quantity)>0?addToCart(p):null;}}
   disabled={Number(p.stock_quantity)===0}
   style={{width:"100%",padding:"8px",borderRadius:8,background:Number(p.stock_quantity)===0?"rgba(255,255,255,.05)":"rgba(0,180,216,.12)",border:`1px solid ${Number(p.stock_quantity)===0?"rgba(255,255,255,.1)":"rgba(0,180,216,.3)"}`,color:Number(p.stock_quantity)===0?"#666":"#00B4D8",fontSize:11,fontWeight:600,cursor:Number(p.stock_quantity)===0?"not-allowed":"pointer",fontFamily:"inherit",transition:"background .2s"}}
