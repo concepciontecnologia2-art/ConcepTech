@@ -39,31 +39,36 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
 
 
  useEffect(()=>{
-  if (!registered || products.length === 0) return;
+  if (!registered) return;
   const hash = window.location.hash;
   if (!hash.startsWith("#producto-")) return;
   const id = hash.replace("#producto-","");
-  
-  // Esperar que el DOM renderice los productos
+
+  // Buscar el producto en la lista
+  const prod = initialProducts.find((p:any) => String(p.id) === id);
+  if (!prod) return;
+
+  // Filtrar por la categoría del producto para que aparezca
+  setActiveCat(null); // mostrar todos
+  setSearch(""); // limpiar búsqueda
+
   const intentar = (intentos = 0) => {
     const el = document.getElementById(`producto-${id}`);
     if (el) {
-      el.scrollIntoView({behavior:"smooth", block:"center"});
-      // Destacar el producto visualmente
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
       el.style.border = "2px solid #3b82f6";
       el.style.boxShadow = "0 0 0 4px rgba(59,130,246,.2)";
       setTimeout(()=>{
         el.style.border = "";
         el.style.boxShadow = "";
       }, 2000);
-    } else if (intentos < 10) {
-      setTimeout(()=>intentar(intentos + 1), 300);
+    } else if (intentos < 20) {
+      setTimeout(()=>intentar(intentos + 1), 400);
     }
   };
-  
-  setTimeout(()=>intentar(), 500);
-},[registered, products]);
 
+  setTimeout(()=>intentar(), 800);
+},[registered]);
 
   const handleRegister = async () => {
     if (!regForm.name||!regForm.phone) { setRegError("Completá todos los campos"); return; }
@@ -189,10 +194,9 @@ ${lines}
 };
 
   const MayoristaCategorySection = ({ catName, prods }: { catName:string; prods:any[] }) => {
-  const [visibleCount, setVisibleCount] = useState(6);
-  const visible = prods.slice(0, visibleCount);
-  const hasMore = visibleCount < prods.length;
-  const hasLess = visibleCount > 6;
+  const hash = typeof window !== "undefined" ? window.location.hash : "";
+  const hayHashEnEstaCat = prods.some(p => `#producto-${p.id}` === hash);
+  const [visibleCount, setVisibleCount] = useState(hayHashEnEstaCat ? prods.length : 6);
   return (
     <section style={{marginBottom:40}}>
       {catName&&(
