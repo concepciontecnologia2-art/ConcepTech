@@ -197,6 +197,9 @@ ${lines}
   const hash = typeof window !== "undefined" ? window.location.hash : "";
   const hayHashEnEstaCat = prods.some(p => `#producto-${p.id}` === hash);
   const [visibleCount, setVisibleCount] = useState(hayHashEnEstaCat ? prods.length : 6);
+  const visible = prods.slice(0, visibleCount);
+const hasMore = visibleCount < prods.length;
+const hasLess = visibleCount > 6;
   return (
     <section style={{marginBottom:40}}>
       {catName&&(
