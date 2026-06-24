@@ -341,12 +341,12 @@ const hasLess = visibleCount > 6;
       `}</style>
 
       {/* HEADER */}
-      <header style={{position:"sticky",top:0,zIndex:50,borderBottom:"1px solid #e5e7eb",background:"#ffffff",padding:"14px 20px"}}>
+      <header style={{position:"fixed",top:0,zIndex:50,borderBottom:"1px solid #e5e7eb",background:"#ffffff",padding:"14px 20px"}}>
         <div style={{maxWidth:1400,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
           <div>
             <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(15px,3vw,20px)",fontWeight:800,color:"#1a1a1a"}}>
               <span style={{color:"#00B4D8"}}>Concepción</span> Tecnología
-              <span style={{marginLeft:10,padding:"3px 10px",background:"rgba(59,130,246,.1)",border:"1px solid rgba(59,130,246,.3)",borderRadius:20,fontSize:11,color:"#3b82f6"}}>MAYORISTA SAMSUNG</span>
+              <span style={{marginLeft:10,padding:"3px 10px",background:"rgba(59,130,246,.1)",border:"1px solid rgba(59,130,246,.3)",borderRadius:20,fontSize:11,color:"#3b82f6"}}>MAYORISTA</span>
             </h1>
             <p style={{fontSize:11,color:"#666",marginTop:2}}>Bienvenido, {regForm.name} · <span style={{color:"#ef4444",fontWeight:700}}>Compra mínima $80.000</span></p>
           </div>
