@@ -12,7 +12,6 @@ export default function ProductoMayoristaPage() {
   const [loading, setLoading] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
-  // Carga inicial
   useEffect(() => {
     const saved = localStorage.getItem("cart");
     if (saved) setCart(JSON.parse(saved));
@@ -22,10 +21,8 @@ export default function ProductoMayoristaPage() {
       .catch(() => setLoading(false));
   }, [id]);
 
-  // Guardado automático
   useEffect(() => { localStorage.setItem("cart", JSON.stringify(cart)); }, [cart]);
 
-  // Lógica de carrito
   const addToCart = (p: any) => {
     setCart(prev => {
       const ex = prev.find(i => i.id === p.id);
@@ -42,7 +39,7 @@ export default function ProductoMayoristaPage() {
     const total = cart.reduce((s, i) => s + i.qty * Number(i.price_wholesale), 0);
     const msg = encodeURIComponent(`📦 *Nuevo Pedido Mayorista*\n\n${items}\n\n*Total: ${fmt(total)}*\n\n¡Espero confirmación!`);
     window.open(`https://wa.me/${WA}?text=${msg}`, "_blank");
-    setCart([]); // Limpiar tras enviar
+    setCart([]);
     localStorage.removeItem("cart");
     setIsCartOpen(false);
   };
@@ -53,16 +50,14 @@ export default function ProductoMayoristaPage() {
   const itemInCart = cart.find(i => i.id === product.id);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#258ff8", fontFamily: "system-ui" }}>
-      {/* HEADER */}
-      <header style={{ background: "#3314e7", padding: 20, borderBottom: "1px solid #e2e8f0" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui" }}>
+      <header style={{ background: "#fff", padding: 20, borderBottom: "1px solid #e2e8f0" }}>
         <a href="/mayorista" style={{ color: "#000", fontWeight: 700, textDecoration: "none" }}>← Volver al catálogo</a>
       </header>
 
-      {/* CONTENIDO */}
       <main style={{ maxWidth: 600, margin: "24px auto", padding: "0 20px" }}>
-        <div style={{ background: "#000000", padding: 24, borderRadius: 20, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
-          <img src={product.image_url} style={{ width: "100%", borderRadius: 12 }} />
+        <div style={{ background: "#fff", padding: 24, borderRadius: 20, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
+          <img src={product.image_url} style={{ width: "100%", borderRadius: 12 }} alt={product.name} />
           <h1 style={{ fontSize: 24, marginTop: 16 }}>{product.name}</h1>
           <p style={{ fontSize: 28, fontWeight: 800, color: "#3b82f6" }}>{fmt(Number(product.price_wholesale))}</p>
           
@@ -74,74 +69,31 @@ export default function ProductoMayoristaPage() {
         </div>
       </main>
 
-      {/* BOTÓN FLOTANTE */}
       {cart.length > 0 && (
-        <button onClick={() => setIsCartOpen(true)} style={{ position: "fixed", bottom: 20, right: 20, background: "#000", color: "#fff", padding: "15px 25px", borderRadius: 30, border: "none", cursor: "pointer" }}>
+        <button onClick={() => setIsCartOpen(true)} style={{ position: "fixed", bottom: 20, right: 20, background: "#000", color: "#fff", padding: "15px 25px", borderRadius: 30, border: "none", cursor: "pointer", zIndex: 999 }}>
           🛒 Ver Carrito ({cart.reduce((a, b) => a + b.qty, 0)})
         </button>
       )}
 
-      {/* DRAWER PROFESIONAL */}
-{isCartOpen && (
-  <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} onClick={() => setIsCartOpen(false)}>
-    <div 
-      style={{ 
-        position: "absolute", 
-        right: 0, 
-        top: 20, // Despegado del tope
-        bottom: 20, // Despegado del fondo
-        width: "90%", 
-        maxWidth: 400, 
-        background: "#fff", 
-        padding: 24, 
-        borderRadius: "24px 0 0 24px", // Borde redondeado solo a la izquierda
-        boxShadow: "-10px 0 30px rgba(0,0,0,0.1)",
-        display: "flex",
-        flexDirection: "column"
-      }} 
-      onClick={e => e.stopPropagation()}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <h2 style={{ margin: 0, fontSize: 20 }}>Tu pedido</h2>
-        {/* BOTÓN PARA VOLVER ATRÁS / CERRAR */}
-        <button 
-          onClick={() => setIsCartOpen(false)} 
-          style={{ 
-            background: "#f1f5f9", 
-            border: "none", 
-            padding: "8px 16px", 
-            borderRadius: 8, 
-            cursor: "pointer", 
-            fontWeight: 600,
-            fontSize: 14 
-          }}
-        >
-          ← Volver
-        </button>
-      </div>
-
-      {/* LISTA DE PRODUCTOS CON SCROLL */}
-      <div style={{ flex: 1, overflowY: "auto", paddingRight: 8 }}>
-        {cart.map(item => (
-          <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{item.name}</div>
-              <div style={{ fontSize: 12, color: "#64748b" }}>{item.qty} un. — {fmt(item.price_wholesale * item.qty)}</div>
+      {isCartOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} onClick={() => setIsCartOpen(false)}>
+          <div style={{ position: "absolute", right: 0, top: 20, bottom: 20, width: "90%", maxWidth: 400, background: "#fff", padding: 24, borderRadius: "24px 0 0 24px", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h2 style={{ margin: 0 }}>Tu Pedido</h2>
+              <button onClick={() => setIsCartOpen(false)} style={{ border: "none", background: "#f1f5f9", padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}>← Volver</button>
             </div>
-            <button 
-              onClick={() => setCart(prev => prev.filter(p => p.id !== item.id))} 
-              style={{ color: "#ef4444", border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
-            >
-              Eliminar
-            </button>
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {cart.map(item => (
+                <div key={item.id} style={{ display: "flex", justifyContent: "space-between", margin: "15px 0" }}>
+                  <span>{item.qty}x {item.name}</span>
+                  <button onClick={() => setCart(prev => prev.filter(p => p.id !== item.id))} style={{ color: "red", border: "none", background: "none", cursor: "pointer" }}>✕</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={sendWhatsApp} style={{ width: "100%", padding: 15, background: "#22c55e", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Enviar por WhatsApp</button>
           </div>
-        ))}
-      </div>
-
-      {/* BOTÓN FINALIZAR */}
-      <button onClick={sendWhatsApp} style={{ width: "100%", padding: 16, background: "#22c55e", color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontWeight: 700, marginTop: 10 }}>
-        Enviar por WhatsApp
-      </button>
+        </div>
+      )}
     </div>
-  </div>
-)}
+  );
+}
