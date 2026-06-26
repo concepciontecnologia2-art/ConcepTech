@@ -81,23 +81,67 @@ export default function ProductoMayoristaPage() {
         </button>
       )}
 
-      {/* DRAWER */}
-      {isCartOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000 }} onClick={() => setIsCartOpen(false)}>
-          <div style={{ position: "absolute", right: 0, top: 0, width: "100%", maxWidth: 400, height: "100%", background: "#0a0a0a", padding: 24 }} onClick={e => e.stopPropagation()}>
-            <h2>Tu Pedido</h2>
-            {cart.map(item => (
-              <div key={item.id} style={{ display: "flex", justifyContent: "space-between", margin: "15px 0" }}>
-                <span>{item.qty}x {item.name}</span>
-                <button onClick={() => setCart(prev => prev.filter(p => p.id !== item.id))} style={{ color: "red", border: "none", background: "none" }}>✕</button>
-              </div>
-            ))}
-            <button onClick={sendWhatsApp} style={{ width: "100%", padding: 15, background: "#22c55e", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-              Enviar por WhatsApp
+      {/* DRAWER PROFESIONAL */}
+{isCartOpen && (
+  <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} onClick={() => setIsCartOpen(false)}>
+    <div 
+      style={{ 
+        position: "absolute", 
+        right: 0, 
+        top: 20, // Despegado del tope
+        bottom: 20, // Despegado del fondo
+        width: "90%", 
+        maxWidth: 400, 
+        background: "#fff", 
+        padding: 24, 
+        borderRadius: "24px 0 0 24px", // Borde redondeado solo a la izquierda
+        boxShadow: "-10px 0 30px rgba(0,0,0,0.1)",
+        display: "flex",
+        flexDirection: "column"
+      }} 
+      onClick={e => e.stopPropagation()}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <h2 style={{ margin: 0, fontSize: 20 }}>Tu pedido</h2>
+        {/* BOTÓN PARA VOLVER ATRÁS / CERRAR */}
+        <button 
+          onClick={() => setIsCartOpen(false)} 
+          style={{ 
+            background: "#f1f5f9", 
+            border: "none", 
+            padding: "8px 16px", 
+            borderRadius: 8, 
+            cursor: "pointer", 
+            fontWeight: 600,
+            fontSize: 14 
+          }}
+        >
+          ← Volver
+        </button>
+      </div>
+
+      {/* LISTA DE PRODUCTOS CON SCROLL */}
+      <div style={{ flex: 1, overflowY: "auto", paddingRight: 8 }}>
+        {cart.map(item => (
+          <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{item.name}</div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>{item.qty} un. — {fmt(item.price_wholesale * item.qty)}</div>
+            </div>
+            <button 
+              onClick={() => setCart(prev => prev.filter(p => p.id !== item.id))} 
+              style={{ color: "#ef4444", border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+            >
+              Eliminar
             </button>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
+
+      {/* BOTÓN FINALIZAR */}
+      <button onClick={sendWhatsApp} style={{ width: "100%", padding: 16, background: "#22c55e", color: "#fff", border: "none", borderRadius: 12, cursor: "pointer", fontWeight: 700, marginTop: 10 }}>
+        Enviar por WhatsApp
+      </button>
     </div>
-  );
-}
+  </div>
+)}
