@@ -214,27 +214,39 @@ const hasLess = visibleCount > 6;
         </div>
       )}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:14}}>
-        {visible.map(p=>{
-          const inCart=cart.find((i:any)=>i.id===p.id);
-          return (
-            <div key={p.id} id={`producto-${p.id}`} style={{background:"#ffffff",border:`1px solid ${inCart?"rgba(59,130,246,.4)":"#e5e7eb"}`,borderRadius:14,overflow:"hidden",transition:"all .25s"}}>
-              <ProductImageCarousel productId={p.id} mainImage={p.image_url}/>
-              <div style={{padding:"12px 13px"}}>
-                <p style={{fontSize:12,fontWeight:600,color:"#1a1a1a",lineHeight:1.3,marginBottom:4}}>{p.name}</p>
-                {p.description&&<p style={{fontSize:10,color:"#666",lineHeight:1.4,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.description}</p>}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <button onClick={()=>updateQty(p.id,-1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-                       <input type="number" min="0" value={inCart?.qty||0}
-  onChange={e=>{const qty=Math.max(0,Number(e.target.value)); setCart(prev=>{const ex=prev.find(i=>i.id===p.id); return ex?prev.map(i=>i.id===p.id?{...i,qty}:i):qty>0?[...prev,{...p,qty}]:prev;});}}
-  style={{width:36,textAlign:"center",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,fontSize:12,padding:"3px 0",fontFamily:"inherit",color:"#1a1a1a",outline:"none",background:"rgba(59,130,246,.04)"}}/>
-                    <button onClick={()=>addToCart(p)} disabled={Number(p.stock_quantity)===0} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:Number(p.stock_quantity)===0?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <p style={{fontSize:18,fontWeight:800,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</p>
-                    <p style={{fontSize:11,color:"#999",textDecoration:"line-through"}}>{fmt(Number(p.price_retail))}</p>
-                  </div>
-                </div>
+  {visible.map(p => {
+    const inCart = cart.find((i: any) => i.id === p.id);
+    return (
+      <a 
+        key={p.id} 
+        href={`/mayorista/producto/${p.id}`}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest("input")) {
+            e.preventDefault();
+          }
+        }}
+        style={{textDecoration: "none", color: "inherit", display: "block", background: "#ffffff", border: `1px solid ${inCart ? "rgba(59,130,246,.4)" : "#e5e7eb"}`, borderRadius: 14, overflow: "hidden", transition: "all .25s"}}
+      >
+        <div id={`producto-${p.id}`}>
+          <ProductImageCarousel productId={p.id} mainImage={p.image_url}/>
+          <div style={{padding:"12px 13px"}}>
+            <p style={{fontSize:12,fontWeight:600,color:"#000000",lineHeight:1.3,marginBottom:4}}>{p.name}</p>
+            {p.description && <p style={{fontSize:10,color:"#000000",lineHeight:1.4,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.description}</p>}
+            
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <button onClick={(e) => { e.preventDefault(); updateQty(p.id,-1); }} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+                <input type="number" min="0" value={inCart?.qty||0} 
+                  onClick={(e) => e.preventDefault()}
+                  onChange={e => { const qty=Math.max(0,Number(e.target.value)); setCart(prev=>{const ex=prev.find(i=>i.id===p.id); return ex?prev.map(i=>i.id===p.id?{...i,qty}:i):qty>0?[...prev,{...p,qty}]:prev;});}}
+                  style={{width:36,textAlign:"center",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,fontSize:12,padding:"3px 0",fontFamily:"inherit",color:"#1a1a1a",outline:"none",background:"rgba(59,130,246,.04)"}}/>
+                <button onClick={(e) => { e.preventDefault(); addToCart(p); }} disabled={Number(p.stock_quantity)===0} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:Number(p.stock_quantity)===0?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <p style={{fontSize:18,fontWeight:800,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</p>
+                <p style={{fontSize:11,color:"#999",textDecoration:"line-through"}}>{fmt(Number(p.price_retail))}</p>
+              </div>
+            </div>
                <p style={{fontSize:10,fontWeight:700,marginBottom:6,color:
   Number(p.stock_quantity)===0?"#ef4444":
   Number(p.stock_quantity)<=3?"#ef4444":
@@ -264,6 +276,7 @@ const hasLess = visibleCount > 6;
                 </div>
               </div>
             </div>
+            </a>
           );
         })}
       </div>
