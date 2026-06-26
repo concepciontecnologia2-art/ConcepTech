@@ -50,47 +50,50 @@ export default function ProductoMayoristaPage() {
   const itemInCart = cart.find(i => i.id === product.id);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui" }}>
-      <header style={{ background: "#fff", padding: 20, borderBottom: "1px solid #e2e8f0" }}>
-        <a href="/mayorista" style={{ color: "#000", fontWeight: 700, textDecoration: "none" }}>← Volver al catálogo</a>
+    <div style={{ minHeight: "100vh", background: "#f0f7ff", fontFamily: "system-ui" }}>
+      {/* HEADER AZUL */}
+      <header style={{ background: "#0077b6", padding: 20, borderBottom: "1px solid #023e8a" }}>
+        <a href="/mayorista" style={{ color: "#fff", fontWeight: 700, textDecoration: "none" }}>← Volver al catálogo</a>
       </header>
 
       <main style={{ maxWidth: 600, margin: "24px auto", padding: "0 20px" }}>
-        <div style={{ background: "#fff", padding: 24, borderRadius: 20, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
+        <div style={{ background: "#fff", padding: 24, borderRadius: 20, boxShadow: "0 4px 15px rgba(0,119,182,0.1)" }}>
           <img src={product.image_url} style={{ width: "100%", borderRadius: 12 }} alt={product.name} />
           <h1 style={{ fontSize: 24, marginTop: 16 }}>{product.name}</h1>
-          <p style={{ fontSize: 28, fontWeight: 800, color: "#3b82f6" }}>{fmt(Number(product.price_wholesale))}</p>
+          <p style={{ fontSize: 28, fontWeight: 800, color: "#0077b6" }}>{fmt(Number(product.price_wholesale))}</p>
           
           <div style={{ display: "flex", alignItems: "center", gap: 15, marginTop: 20 }}>
-            <button onClick={() => updateQty(product.id, -1)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #ccc", cursor: "pointer" }}>-</button>
+            <button onClick={() => updateQty(product.id, -1)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid #00b4d8", background: "#fff", color: "#00b4d8", cursor: "pointer", fontWeight: 700 }}>-</button>
             <span style={{ fontSize: 18, fontWeight: 700 }}>{itemInCart?.qty || 0}</span>
-            <button onClick={() => addToCart(product)} style={{ padding: "10px 20px", borderRadius: 8, background: "#3b82f6", color: "#fff", border: "none", cursor: "pointer" }}>+</button>
+            <button onClick={() => addToCart(product)} style={{ padding: "10px 20px", borderRadius: 8, background: "#00b4d8", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700 }}>+</button>
           </div>
         </div>
       </main>
 
+      {/* BOTÓN FLOTANTE CELESTE */}
       {cart.length > 0 && (
-        <button onClick={() => setIsCartOpen(true)} style={{ position: "fixed", bottom: 20, right: 20, background: "#000", color: "#fff", padding: "15px 25px", borderRadius: 30, border: "none", cursor: "pointer", zIndex: 999 }}>
+        <button onClick={() => setIsCartOpen(true)} style={{ position: "fixed", bottom: 20, right: 20, background: "#0077b6", color: "#fff", padding: "15px 25px", borderRadius: 30, border: "none", cursor: "pointer", zIndex: 999, boxShadow: "0 4px 10px rgba(0,0,0,0.2)" }}>
           🛒 Ver Carrito ({cart.reduce((a, b) => a + b.qty, 0)})
         </button>
       )}
 
+      {/* DRAWER AZUL Y BLANCO */}
       {isCartOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, backdropFilter: "blur(4px)" }} onClick={() => setIsCartOpen(false)}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,119,182,0.3)", zIndex: 1000, backdropFilter: "blur(4px)" }} onClick={() => setIsCartOpen(false)}>
           <div style={{ position: "absolute", right: 0, top: 20, bottom: 20, width: "90%", maxWidth: 400, background: "#fff", padding: 24, borderRadius: "24px 0 0 24px", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h2 style={{ margin: 0 }}>Tu Pedido</h2>
-              <button onClick={() => setIsCartOpen(false)} style={{ border: "none", background: "#f1f5f9", padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}>← Volver</button>
+              <h2 style={{ margin: 0, color: "#0077b6" }}>Tu Pedido</h2>
+              <button onClick={() => setIsCartOpen(false)} style={{ border: "none", background: "#e0f2fe", color: "#0077b6", padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>← Volver</button>
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {cart.map(item => (
-                <div key={item.id} style={{ display: "flex", justifyContent: "space-between", margin: "15px 0" }}>
+                <div key={item.id} style={{ display: "flex", justifyContent: "space-between", margin: "15px 0", paddingBottom: 10, borderBottom: "1px solid #f0f7ff" }}>
                   <span>{item.qty}x {item.name}</span>
-                  <button onClick={() => setCart(prev => prev.filter(p => p.id !== item.id))} style={{ color: "red", border: "none", background: "none", cursor: "pointer" }}>✕</button>
+                  <button onClick={() => setCart(prev => prev.filter(p => p.id !== item.id))} style={{ color: "#ef4444", border: "none", background: "none", cursor: "pointer" }}>✕</button>
                 </div>
               ))}
             </div>
-            <button onClick={sendWhatsApp} style={{ width: "100%", padding: 15, background: "#22c55e", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>Enviar por WhatsApp</button>
+            <button onClick={sendWhatsApp} style={{ width: "100%", padding: 15, background: "#00b4d8", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>Enviar por WhatsApp</button>
           </div>
         </div>
       )}
