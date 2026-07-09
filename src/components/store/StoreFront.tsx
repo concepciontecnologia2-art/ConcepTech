@@ -154,16 +154,9 @@ useEffect(()=>{
    `🟢 ${p.stock_quantity} u.`}
 </p>
 
-           {Number(p.stock_quantity)>0&&(
-  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-    <button onClick={e=>{e.stopPropagation(); setCart(prev=>{const ex=prev.find(i=>i.id===p.id); return ex?prev.map(i=>i.id===p.id?{...i,qty:Math.max(1,i.qty-1)}:i):prev;});}}
-      style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-    <input type="number" min="1" value={inCart?.qty||1}
-      onChange={e=>{e.stopPropagation(); const qty=Math.max(1,Number(e.target.value)); setCart(prev=>{const ex=prev.find(i=>i.id===p.id); return ex?prev.map(i=>i.id===p.id?{...i,qty}:i):prev;});}}
-      style={{width:40,textAlign:"center",border:"1px solid #e5e7eb",borderRadius:6,fontSize:12,padding:"3px 0",fontFamily:"inherit",color:"#1a1a1a",outline:"none"}}/>
-    <button onClick={e=>{e.stopPropagation(); setCart(prev=>{const ex=prev.find(i=>i.id===p.id); return ex?prev.map(i=>i.id===p.id?{...i,qty:i.qty+1}:i):prev;});}}
-      style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-  </div>
+          {Number(p.stock_quantity) > 0 && (
+  // El contenido de los botones e input ha sido eliminado
+  null 
 )}
 <a href={`/mayorista#producto-${p.id}`} 
   onClick={e=>e.stopPropagation()}
