@@ -20,8 +20,20 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   const [activeCat, setActiveCat] = useState<string|null>(null);
   const [activeSub, setActiveSub] = useState<number|null>(null);
   const [sort, setSort]           = useState<"default"|"asc"|"desc">("default");
-  const [cart, setCart]           = useState<Item[]>([]);
+const [cart, setCart] = useState<Item[]>(()=>{
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem("cart_minorista");
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
+});
+
+useEffect(()=>{
+  localStorage.setItem("cart_minorista", JSON.stringify(cart));
+},[cart]);
+
   const [cartOpen, setCartOpen]   = useState(false);
+  
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [orderDone, setOrderDone] = useState(false);
   const [sending, setSending]     = useState(false);
