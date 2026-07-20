@@ -1000,6 +1000,16 @@ export default function AdminPage() {
       .catch(()=>setAuthed(false));
   },[]);
 
+
+  useEffect(()=>{
+  const existing = document.querySelector("link[rel='manifest']");
+  if (existing) existing.setAttribute("href", "/manifest-admin.json");
+  return ()=>{
+    if (existing) existing.setAttribute("href", "/manifest.json");
+  };
+},[]);
+
+
   const logout = async()=>{
     await fetch("/api/auth/login",{method:"DELETE",credentials:"include"});
     setAuthed(false);

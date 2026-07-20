@@ -507,21 +507,7 @@ const InstallButton = () => {
     </div>
   )}
 
-  {/* BANNER LINK */}
-  <a href="https://concepciontecnologia2-art.github.io/REVISTA-DIGITAL/" target="_blank"
-  style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"linear-gradient(135deg,#1a1a2e,#16213e)",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,textDecoration:"none",marginBottom:14,gap:12}}>
-  <div style={{display:"flex",alignItems:"center",gap:10}}>
-    <span style={{fontSize:24}}>⚽</span>
-    <div>
-      <p style={{fontSize:13,fontWeight:700,color:"#ffffff",margin:0}}>Mundial 2026</p>
-      <p style={{fontSize:11,color:"rgba(255,255,255,.6)",margin:0}}>Ver fixture completo →</p>
-    </div>
-  </div>
-  <span style={{background:"#00B4D8",color:"#fff",fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:20,whiteSpace:"nowrap"}}>Ver ahora</span>
-</a>
-</div>
-
-<div className="pad">
+  
   
 
           {/* OFERTAS Y NOVEDADES */}

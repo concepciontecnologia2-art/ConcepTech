@@ -2,7 +2,6 @@
 import { useState, useMemo, useEffect } from "react";
 
 const WA    = process.env.NEXT_PUBLIC_WHATSAPP!;
-const ALIAS = process.env.NEXT_PUBLIC_STORE_ALIAS!;
 const fmt = (n: number) => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(n);
 
 type Prod = { id:number; name:string; description:string; category_name:string; category_icon:string;
@@ -11,7 +10,11 @@ type Prod = { id:number; name:string; description:string; category_name:string; 
 type Cat  = { id:number; name:string; icon:string; slug:string };
 type Item = Prod & { qty:number };
 
+const GENERIC = "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80";
+
 export default function MayoristaPage({ initialProducts, categories }: { initialProducts: Prod[]; categories: Cat[] }) {
+  const [showWelcome, setShowWelcome] = useState(true);
+   // O puedes usar localStorage para mostrarlo solo la primera vez
   const [registered, setRegistered] = useState(false);
   const [regForm, setRegForm] = useState({ name:"", phone:"" });
   const [regError, setRegError]   = useState("");
@@ -20,13 +23,83 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
   const [search, setSearch]       = useState("");
   const [activeCat, setActiveCat] = useState<string|null>(null);
   const [sort, setSort]           = useState<"default"|"asc"|"desc">("default");
-  const [cart, setCart]           = useState<Item[]>([]);
+  const [cart, setCart] = useState<Item[]>(() => {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem("cart_mayorista");
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
+});
+
+useEffect(() => {
+  localStorage.setItem("cart_mayorista", JSON.stringify(cart));
+}, [cart]);
+
+const WelcomeModal = ({ onClose }: { onClose: () => void }) => (
+  <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+    <div style={{ background: "#ffffff", padding: "24px", borderRadius: 16, width: "90%", maxWidth: 360, textAlign: "center", boxShadow: "0 10px 25px rgba(0,0,0,0.2)" }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>¡Nuevas funciones!</h2>
+      <p style={{ fontSize: 13, color: "#444", marginBottom: 20, lineHeight: 1.5 }}>
+        Ahora podés gestionar tus productos de forma más rápida:
+        <br/><br/>
+        ❤️ <b>Favoritos:</b> Guardá lo que más te gusta.
+        <br/>
+        Mis <b>Pedidos:</b> Seguí tus pedidos anteriores.
+      </p>
+      <button onClick={onClose} style={{ width: "100%", padding: "12px", borderRadius: 8, background: "#0077b6", color: "#fff", border: "none", fontWeight: 700, cursor: "pointer" }}>
+        ¡Entendido!
+      </button>
+    </div>
+  </div>
+);
+
+
   const [cartOpen, setCartOpen]   = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [orderDone, setOrderDone] = useState(false);
   const [payMethod, setPayMethod] = useState<"transfer"|"cash">("transfer");
   const [form, setForm] = useState({ name:"", phone:"", delivery:"pickup", address:"" });
+  const [favIds, setFavIds] = useState<number[]>([]);
+  const [showFavs, setShowFavs] = useState(false);
+  const [showHistorial, setShowHistorial] = useState(false);
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [favProds, setFavProds] = useState<any[]>([]);
+  
 
+  // FUNCIONES FAVORITOS E HISTORIAL
+  const loadFavs = async (phone: string) => {
+    try {
+      const res = await fetch(`/api/favoritos?phone=${phone}`);
+      const data = await res.json();
+      setFavProds(data);
+      setFavIds(data.map((p:any) => p.id));
+    } catch(e) {}
+  };
+
+  const toggleFav = async (productId: number) => {
+    const esFav = favIds.includes(productId);
+    if (esFav) {
+      await fetch("/api/favoritos", { method:"DELETE", headers:{"Content-Type":"application/json"}, body:JSON.stringify({phone:regForm.phone, product_id:productId}) });
+      setFavIds(prev => prev.filter(id => id !== productId));
+      setFavProds(prev => prev.filter((p:any) => p.id !== productId));
+    } else {
+      await fetch("/api/favoritos", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({phone:regForm.phone, product_id:productId}) });
+      setFavIds(prev => [...prev, productId]);
+      const prod = products.find(p => p.id === productId);
+      if (prod) setFavProds(prev => [...prev, prod]);
+    }
+  };
+
+  const loadHistorial = async () => {
+    try {
+      const res = await fetch(`/api/historial?phone=${regForm.phone}`);
+      const data = await res.json();
+      setHistorial(data);
+    } catch(e) {}
+  };
+
+  // EFECTOS
   useEffect(()=>{
     const name = localStorage.getItem("mayorista_name") || "";
     const phone = localStorage.getItem("mayorista_phone") || "";
@@ -34,41 +107,28 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
       setRegistered(true);
       setRegForm({ name, phone });
       setForm(f=>({...f, name, phone }));
+      loadFavs(phone);
     }
   },[]);
 
-
- useEffect(()=>{
-  if (!registered) return;
-  const hash = window.location.hash;
-  if (!hash.startsWith("#producto-")) return;
-  const id = hash.replace("#producto-","");
-
-  // Buscar el producto en la lista
-  const prod = initialProducts.find((p:any) => String(p.id) === id);
-  if (!prod) return;
-
-  // Filtrar por la categoría del producto para que aparezca
-  setActiveCat(null); // mostrar todos
-  setSearch(""); // limpiar búsqueda
-
-  const intentar = (intentos = 0) => {
-    const el = document.getElementById(`producto-${id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.style.border = "2px solid #3b82f6";
-      el.style.boxShadow = "0 0 0 4px rgba(59,130,246,.2)";
-      setTimeout(()=>{
-        el.style.border = "";
-        el.style.boxShadow = "";
-      }, 2000);
-    } else if (intentos < 20) {
-      setTimeout(()=>intentar(intentos + 1), 400);
-    }
-  };
-
-  setTimeout(()=>intentar(), 800);
-},[registered]);
+  useEffect(()=>{
+    if (!registered || initialProducts.length === 0) return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#producto-")) return;
+    const id = hash.replace("#producto-","");
+    const intentar = (intentos = 0) => {
+      const el = document.getElementById(`producto-${id}`);
+      if (el) {
+        el.scrollIntoView({behavior:"smooth", block:"center"});
+        el.style.border = "2px solid #3b82f6";
+        el.style.boxShadow = "0 0 0 4px rgba(59,130,246,.2)";
+        setTimeout(()=>{ el.style.border = ""; el.style.boxShadow = ""; }, 2000);
+      } else if (intentos < 10) {
+        setTimeout(()=>intentar(intentos + 1), 300);
+      }
+    };
+    setTimeout(()=>intentar(), 500);
+  },[registered, initialProducts]);
 
   const handleRegister = async () => {
     if (!regForm.name||!regForm.phone) { setRegError("Completá todos los campos"); return; }
@@ -80,6 +140,7 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
     localStorage.setItem("mayorista_phone", regForm.phone);
     setRegistered(true);
     setForm(f=>({...f, name:regForm.name, phone:regForm.phone }));
+    loadFavs(regForm.phone);
     setRegLoading(false);
   };
 
@@ -116,15 +177,10 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
           items:cart.map(i=>({id:i.id,name:i.name,qty:i.qty,price:Number(i.price_wholesale)})),total:cartTotal})});
     } catch(e){}
     const lines=cart.map(i=>`• ${i.qty}x ${i.name} — ${fmt(i.qty*Number(i.price_wholesale))}`).join("\n");
-    const pagoMsg = payMethod==="transfer"
-      ? `💵 *Paga en efectivo al momento de la entrega.*`
-      : `💵 *Paga en efectivo al momento de la entrega.*`;
-    const msg=encodeURIComponent(`📦 *Pedido Mayorista - Concepción Tecnología*\n\n👤 ${form.name}\n📞 ${form.phone}\n📦 ${form.delivery==="pickup"?"Retira en local":`Envío: ${form.address}`}\n💳 Pago: ${payMethod==="transfer"?"Transferencia":"Efectivo"}\n\n${lines}\n\n*Total: ${fmt(cartTotal)}*\n\n${pagoMsg}`);
+    const msg=encodeURIComponent(`📦 *Pedido Mayorista - Concepción Tecnología*\n\n👤 ${form.name}\n📞 ${form.phone}\n📦 ${form.delivery==="pickup"?"Retira en local":`Envío: ${form.address}`}\n💳 Pago: ${payMethod==="transfer"?"Transferencia":"Efectivo"}\n\n${lines}\n\n*Total: ${fmt(cartTotal)}*`);
     window.open(`https://wa.me/${WA}?text=${msg}`,"_blank");
     setTimeout(()=>setOrderDone(true),600);
   };
-
-  const GENERIC="https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80";
 
   const downloadCatalogoPDF = (catName: string, prods: any[]) => {
     const lines = prods.map((p:any)=>
@@ -135,19 +191,15 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
      CONCEPCIÓN TECNOLOGÍA
   Independencia 450, Concepción, Tucumán
   WhatsApp: 3865630488
-  L-V 9-12 y 16-20hs
+  L-V 9-12 y 16-20hs · Sáb 9-15hs
 ══════════════════════════════════════
-  CATÁLOGO MAYORISTA
-  Categoría: ${catName.toUpperCase()}
-  Fecha: ${new Date().toLocaleDateString("es-AR")}
-  Compra mínima: $80.000
-  Precios sujetos a cambio
+  CATÁLOGO MAYORISTA — ${catName.toUpperCase()}
 ══════════════════════════════════════
 
 ${lines}
 
 ══════════════════════════════════════
-  Pedidos por WhatsApp: 3865630488
+  Pedidos: 3865630488
 ══════════════════════════════════════`;
     const blob = new Blob([txt], { type:"text/plain;charset=utf-8" });
     const a = document.createElement("a");
@@ -158,136 +210,129 @@ ${lines}
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
   };
+
   const ProductImageCarousel = ({ productId, mainImage }: { productId:number; mainImage:string|null }) => {
-  const GENERIC = "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80";
-  const [imgIdx, setImgIdx] = useState(0);
-  const [imgs, setImgs] = useState<string[]>([mainImage||GENERIC]);
-
-  useEffect(()=>{
-    fetch(`/api/products/${productId}/images`)
-      .then(r=>r.json())
-      .then((extra:any[])=>{
-        const all = [mainImage, ...extra.map((i:any)=>i.image_url)].filter(Boolean) as string[];
-        setImgs(all.length>0?all:[GENERIC]);
-      }).catch(()=>{});
-  },[productId]);
-
-  return (
-    <div style={{paddingBottom:"65%",position:"relative",overflow:"hidden",background:"#f8f8f8"}}>
-      <img src={imgs[imgIdx]} alt="" style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"contain",background:"#f8f8f8"}} loading="lazy"/>
-      {imgs.length>1&&(
-        <>
-          <button onClick={e=>{e.stopPropagation();setImgIdx(i=>i===0?imgs.length-1:i-1);}}
-            style={{position:"absolute",left:4,top:"50%",transform:"translateY(-50%)",width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>‹</button>
-          <button onClick={e=>{e.stopPropagation();setImgIdx(i=>i===imgs.length-1?0:i+1);}}
-            style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>›</button>
-          <div style={{position:"absolute",bottom:4,left:"50%",transform:"translateX(-50%)",display:"flex",gap:4,zIndex:2}}>
-            {imgs.map((_,i)=>(
-              <div key={i} onClick={e=>{e.stopPropagation();setImgIdx(i);}}
-                style={{width:i===imgIdx?14:5,height:5,borderRadius:10,background:i===imgIdx?"#3b82f6":"rgba(255,255,255,.6)",cursor:"pointer",transition:"all .3s"}}/>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
-
-  const MayoristaCategorySection = ({ catName, prods }: { catName:string; prods:any[] }) => {
+    const [imgIdx, setImgIdx] = useState(0);
+    const [imgs, setImgs] = useState<string[]>([mainImage||GENERIC]);
+    useEffect(()=>{
+      fetch(`/api/products/${productId}/images`)
+        .then(r=>r.json())
+        .then((extra:any[])=>{
+          const all = [mainImage, ...extra.map((i:any)=>i.image_url)].filter(Boolean) as string[];
+          setImgs(all.length>0?all:[GENERIC]);
+        }).catch(()=>{});
+    },[productId]);
+    return (
+      <div style={{paddingBottom:"65%",position:"relative",overflow:"hidden",background:"#f8f8f8"}}>
+        <img src={imgs[imgIdx]} alt="" style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"contain",background:"#f8f8f8"}} loading="lazy"/>
+        {imgs.length>1&&(
+          <>
+            <button onClick={e=>{e.stopPropagation();setImgIdx(i=>i===0?imgs.length-1:i-1);}}
+              style={{position:"absolute",left:4,top:"50%",transform:"translateY(-50%)",width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>‹</button>
+            <button onClick={e=>{e.stopPropagation();setImgIdx(i=>i===imgs.length-1?0:i+1);}}
+              style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>›</button>
+            <div style={{position:"absolute",bottom:4,left:"50%",transform:"translateX(-50%)",display:"flex",gap:4,zIndex:2}}>
+              {imgs.map((_,i)=>(
+                <div key={i} onClick={e=>{e.stopPropagation();setImgIdx(i);}}
+                  style={{width:i===imgIdx?14:5,height:5,borderRadius:10,background:i===imgIdx?"#3b82f6":"rgba(255,255,255,.6)",cursor:"pointer",transition:"all .3s"}}/>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+const MayoristaCategorySection = ({ catName, prods }: { catName: string; prods: any[] }) => {
   const hash = typeof window !== "undefined" ? window.location.hash : "";
   const hayHashEnEstaCat = prods.some(p => `#producto-${p.id}` === hash);
   const [visibleCount, setVisibleCount] = useState(hayHashEnEstaCat ? prods.length : 6);
   const visible = prods.slice(0, visibleCount);
-const hasMore = visibleCount < prods.length;
-const hasLess = visibleCount > 6;
+  const hasMore = visibleCount < prods.length;
+  const hasLess = visibleCount > 6;
+
   return (
-    <section style={{marginBottom:40}}>
-      {catName&&(
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,color:"#1a1a1a",display:"flex",alignItems:"center",gap:6}}>
-            {categories.find((c:any)=>c.name===catName)?.icon} {catName}
+    <section style={{ marginBottom: 40 }}>
+      {catName && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 700, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 6 }}>
+            {categories.find((c: any) => c.name === catName)?.icon} {catName}
           </h2>
-          <button onClick={()=>downloadCatalogoPDF(catName, prods)}
-            style={{padding:"7px 14px",borderRadius:8,background:"rgba(59,130,246,.1)",border:"1px solid rgba(59,130,246,.3)",color:"#3b82f6",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
-            {"📄 Descargar catálogo"}
+          <button onClick={() => downloadCatalogoPDF(catName, prods)}
+            style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(59,130,246,.1)", border: "1px solid rgba(59,130,246,.3)", color: "#3b82f6", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            Descargar catalogo
           </button>
         </div>
       )}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:14}}>
-  {visible.map(p => {
-    const inCart = cart.find((i: any) => i.id === p.id);
-    return (
-      <a 
-        key={p.id} 
-        href={`/mayorista/producto/${p.id}`}
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest("input")) {
-            e.preventDefault();
-          }
-        }}
-        style={{textDecoration: "none", color: "inherit", display: "block", background: "#ffffff", border: `1px solid ${inCart ? "rgba(59,130,246,.4)" : "#e5e7eb"}`, borderRadius: 14, overflow: "hidden", transition: "all .25s"}}
-      >
-        <div id={`producto-${p.id}`}>
-          <ProductImageCarousel productId={p.id} mainImage={p.image_url}/>
-          <div style={{padding:"12px 13px"}}>
-            <p style={{fontSize:12,fontWeight:600,color:"#000000",lineHeight:1.3,marginBottom:4}}>{p.name}</p>
-            {p.description && <p style={{fontSize:10,color:"#000000",lineHeight:1.4,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.description}</p>}
-            
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <button onClick={(e) => { e.preventDefault(); updateQty(p.id,-1); }} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-                <input type="number" min="0" value={inCart?.qty||0} 
-                  onClick={(e) => e.preventDefault()}
-                  onChange={e => { const qty=Math.max(0,Number(e.target.value)); setCart(prev=>{const ex=prev.find(i=>i.id===p.id); return ex?prev.map(i=>i.id===p.id?{...i,qty}:i):qty>0?[...prev,{...p,qty}]:prev;});}}
-                  style={{width:36,textAlign:"center",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,fontSize:12,padding:"3px 0",fontFamily:"inherit",color:"#1a1a1a",outline:"none",background:"rgba(59,130,246,.04)"}}/>
-                <button onClick={(e) => { e.preventDefault(); addToCart(p); }} disabled={Number(p.stock_quantity)===0} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(59,130,246,.3)",background:"rgba(59,130,246,.08)",color:"#3b82f6",fontSize:14,cursor:Number(p.stock_quantity)===0?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-              </div>
-              <div style={{textAlign:"right"}}>
-                <p style={{fontSize:18,fontWeight:800,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</p>
-                <p style={{fontSize:11,color:"#999",textDecoration:"line-through"}}>{fmt(Number(p.price_retail))}</p>
-              </div>
-            </div>
-               <p style={{fontSize:10,fontWeight:700,marginBottom:6,color:
-  Number(p.stock_quantity)===0?"#ef4444":
-  Number(p.stock_quantity)<=3?"#ef4444":
-  Number(p.stock_quantity)<=10?"#f59e0b":"#10b981"}}>
-  {Number(p.stock_quantity)===0?"🔴 Sin stock":
-   Number(p.stock_quantity)<=3?`🔴 ${p.stock_quantity} u.`:
-   Number(p.stock_quantity)<=10?`🟡 ${p.stock_quantity} u.`:
-   `🟢 ${p.stock_quantity} u.`}
-</p>
-                <div style={{display:"flex",gap:4,marginTop:6}}>
-                  {[
-                    ["wa",<svg key="wa" width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>],
-                    ["fb",<svg key="fb" width="14" height="14" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>],
-                    ["ig",<svg key="ig" width="14" height="14" viewBox="0 0 24 24" fill="url(#igm)"><defs><linearGradient id="igm" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="50%" stopColor="#dc2743"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>],
-                  ].map(([via,icon])=>(
-                    <button key={via as string} onClick={()=>{
-                      const url = `${window.location.origin}/producto/${p.id}`;
-                      const text = `🛒 ${p.name} — ${fmt(Number(p.price_wholesale))} | Concepción Tecnología`;
-                      if (via==="wa") window.open(`https://wa.me/?text=${encodeURIComponent(text+"\n"+url)}`,"_blank");
-                      if (via==="fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,"_blank");
-                      if (via==="ig") navigator.clipboard.writeText(text+"\n"+url).then(()=>alert("✅ Link copiado!"));
-                    }}
-                      style={{flex:1,padding:"5px 0",borderRadius:6,background:"rgba(255,255,255,.04)",border:"1px solid #e5e7eb",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                      {icon}
-                    </button>
-                  ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 14 }}>
+        {visible.map(p => {
+          const inCart = cart.find((i: any) => i.id === p.id);
+          const esFav = favIds.includes(p.id);
+          return (
+            <a key={p.id} href={`/mayorista/producto/${p.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+              <div id={`producto-${p.id}`} style={{ background: "#ffffff", border: `1px solid ${inCart ? "rgba(59,130,246,.4)" : "#e5e7eb"}`, borderRadius: 14, overflow: "hidden", transition: "all .25s", position: "relative" }}>
+                
+                {/* BOTÓN FAVORITO */}
+                <button onClick={e => { e.preventDefault(); e.stopPropagation(); toggleFav(p.id); }}
+                  style={{ position: "absolute", top: 8, right: 8, zIndex: 10, background: "white", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.1)", fontSize: 15 }}>
+                  {esFav ? "❤️" : "🤍"}
+                </button>
+
+                <ProductImageCarousel productId={p.id} mainImage={p.image_url} />
+                
+                <div style={{ padding: "12px 13px" }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: "#000000", lineHeight: 1.3, marginBottom: 4 }}>{p.name}</p>
+                  {p.description && <p style={{ fontSize: 10, color: "#000000", lineHeight: 1.4, marginBottom: 8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{p.description}</p>}
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }} onClick={e => e.preventDefault()}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <button onClick={(e) => { e.preventDefault(); updateQty(p.id, -1); }} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(59,130,246,.3)", background: "rgba(59,130,246,.08)", color: "#3b82f6", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                      <input type="number" min="0" value={inCart?.qty || 0}
+                        onChange={e => { const qty = Math.max(0, Number(e.target.value)); setCart(prev => { const ex = prev.find(i => i.id === p.id); return ex ? prev.map(i => i.id === p.id ? { ...i, qty } : i).filter(i => i.qty > 0) : qty > 0 ? [...prev, { ...p, qty }] : prev; }); }}
+                        style={{ width: 36, textAlign: "center", border: "1px solid rgba(59,130,246,.3)", borderRadius: 6, fontSize: 12, padding: "3px 0", fontFamily: "inherit", color: "#1a1a1a", outline: "none", background: "rgba(59,130,246,.04)" }} />
+                      <button onClick={(e) => { e.preventDefault(); addToCart(p); }} disabled={Number(p.stock_quantity) === 0} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(59,130,246,.3)", background: "rgba(59,130,246,.08)", color: "#3b82f6", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <p style={{ fontSize: 18, fontWeight: 800, color: "#3b82f6" }}>{fmt(Number(p.price_wholesale))}</p>
+                      <p style={{ fontSize: 11, color: "#999", textDecoration: "line-through" }}>{fmt(Number(p.price_retail))}</p>
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: 10, fontWeight: 700, marginBottom: 6, color: Number(p.stock_quantity) === 0 ? "#ef4444" : Number(p.stock_quantity) <= 3 ? "#ef4444" : Number(p.stock_quantity) <= 10 ? "#f59e0b" : "#10b981" }}>
+                    {Number(p.stock_quantity) === 0 ? "🔴 Sin stock" : Number(p.stock_quantity) <= 3 ? `🔴 ${p.stock_quantity} u.` : Number(p.stock_quantity) <= 10 ? `🟡 ${p.stock_quantity} u.` : `🟢 ${p.stock_quantity} u.`}
+                  </p>
+
+                  <div style={{ display: "flex", gap: 4, marginTop: 6 }} onClick={e => e.preventDefault()}>
+                    {[
+                      ["wa", <svg key="wa" width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>],
+                      ["fb", <svg key="fb" width="14" height="14" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>],
+                      ["ig", <svg key="ig" width="14" height="14" viewBox="0 0 24 24" fill="url(#igm)"><defs><linearGradient id="igm" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="50%" stopColor="#dc2743"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>],
+                    ].map(([via, icon]) => (
+                      <button key={via as string} onClick={(e) => { e.preventDefault(); e.stopPropagation();
+                        const url = `${window.location.origin}/producto/${p.id}`;
+                        const text = `🛒 ${p.name} — ${fmt(Number(p.price_wholesale))} | Concepción Tecnología`;
+                        if (via === "wa") window.open(`https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`, "_blank");
+                        if (via === "fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
+                        if (via === "ig") navigator.clipboard.writeText(text + "\n" + url).then(() => alert("✅ Link copiado!"));
+                      }}
+                        style={{ flex: 1, padding: "5px 0", borderRadius: 6, background: "rgba(255,255,255,.04)", border: "1px solid #e5e7eb", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
             </a>
           );
         })}
       </div>
-      <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:12}}>
-        {hasMore&&<button onClick={()=>setVisibleCount(v=>Math.min(v+6,prods.length))}
-          style={{padding:"8px 20px",borderRadius:8,background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.25)",color:"#3b82f6",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-          {`▼ Ver más (${prods.length-visibleCount} restantes)`}
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 12 }}>
+        {hasMore && <button onClick={() => setVisibleCount(v => Math.min(v + 6, prods.length))}
+          style={{ padding: "8px 20px", borderRadius: 8, background: "rgba(59,130,246,.08)", border: "1px solid rgba(59,130,246,.25)", color: "#3b82f6", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          {`Ver mas (${prods.length - visibleCount} restantes)`}
         </button>}
-        {hasLess&&<button onClick={()=>setVisibleCount(6)}
-          style={{padding:"8px 20px",borderRadius:8,background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",color:"#ef4444",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-          {"▲ Ver menos"}
+        {hasLess && <button onClick={() => setVisibleCount(6)}
+          style={{ padding: "8px 20px", borderRadius: 8, background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.25)", color: "#ef4444", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          Ver menos
         </button>}
       </div>
     </section>
@@ -303,10 +348,10 @@ const hasLess = visibleCount > 6;
             <span style={{color:"#00B4D8"}}>Concepción</span> Tecnología
           </a>
           <div style={{display:"inline-block",padding:"4px 14px",background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:20,fontSize:12,fontWeight:600,color:"#00B4D8",marginBottom:8}}>
-            {"📦 Precio Mayorista"}
+            Precio Mayorista
           </div>
           <p style={{color:"#666",fontSize:14,lineHeight:1.5}}>Registrate para ver los precios mayoristas y hacer tus pedidos.</p>
-          <p style={{color:"#ef4444",fontSize:12,fontWeight:700,marginTop:6}}>{"⚠️ COMPRA MÍNIMA $80.000"}</p>
+          <p style={{color:"#ef4444",fontSize:12,fontWeight:700,marginTop:6}}>COMPRA MINIMA $80.000</p>
         </div>
         <div style={{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:18,padding:28}}>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -323,91 +368,89 @@ const hasLess = visibleCount > 6;
           {regError&&<p style={{color:"#ef4444",fontSize:12,marginTop:10}}>{regError}</p>}
           <button onClick={handleRegister} disabled={regLoading}
             style={{width:"100%",marginTop:20,padding:14,background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",borderRadius:10,color:"#00B4D8",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:regLoading?.6:1}}>
-            {regLoading?"Registrando...":"Acceder a precios mayoristas →"}
+            {regLoading?"Registrando...":"Acceder a precios mayoristas"}
           </button>
-          <a href="/" style={{display:"block",textAlign:"center",marginTop:12,fontSize:12,color:"#666",textDecoration:"none"}}>{"← Volver a tienda minorista"}</a>
+          <a href="/" style={{display:"block",textAlign:"center",marginTop:12,fontSize:12,color:"#666",textDecoration:"none"}}>Volver a tienda minorista</a>
         </div>
       </div>
     </div>
   );
 
-  return (
-    <div style={{minHeight:"100vh",background:"#ffffff",color:"#1a1a1a",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        .if3{width:100%;padding:13px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;color:#1a1a1a;font-size:14px;outline:none;font-family:inherit}
-        .if3:focus{border-color:rgba(59,130,246,.4)}
-        .sx2{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:auto}
-        .sx2::-webkit-scrollbar{display:none}
-        .pb2{padding:7px 16px;border-radius:100px;border:1px solid #e5e7eb;background:#ffffff;color:#444;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap;font-family:inherit;transition:all .2s}
-        .pb2:hover,.pb2.active{border-color:rgba(59,130,246,.5);color:#3b82f6;background:rgba(59,130,246,.08)}
-        .drawer{position:fixed;inset:0;z-index:100;display:flex;justify-content:flex-end}
-        .drawer-panel{position:relative;z-index:1;background:#ffffff;border-left:1px solid #e5e7eb;width:100%;max-width:440px;height:100vh;overflow-y:auto;padding:24px;animation:slideIn .25s ease}
-        @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
-        .overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
-        .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;padding:0;background:rgba(0,0,0,.6);backdrop-filter:blur(8px)}
-        @media(min-width:640px){.modal{align-items:center;padding:20px}}
-        .modal-box{background:#ffffff;border:1px solid #e5e7eb;border-radius:20px 20px 0 0;padding:28px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;animation:fU .25s ease}
-        @media(min-width:640px){.modal-box{border-radius:20px}}
-        @keyframes fU{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
-      `}</style>
+ return (
+  <div style={{ minHeight: "100vh", background: "#ffffff", color: "#1a1a1a", fontFamily: "'DM Sans',system-ui,sans-serif" }}>
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');
+      *{box-sizing:border-box;margin:0;padding:0}
+      .if3{width:100%;padding:13px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;color:#1a1a1a;font-size:14px;outline:none;font-family:inherit}
+      .if3:focus{border-color:rgba(59,130,246,.4)}
+      .sx2{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:auto}
+      .sx2::-webkit-scrollbar{display:none}
+      .pb2{padding:7px 16px;border-radius:100px;border:1px solid #e5e7eb;background:#ffffff;color:#444;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap;font-family:inherit;transition:all .2s}
+      .pb2:hover,.pb2.active{border-color:rgba(59,130,246,.5);color:#3b82f6;background:rgba(59,130,246,.08)}
+      .drawer{position:fixed;inset:0;z-index:100;display:flex;justify-content:flex-end}
+      .drawer-panel{position:relative;z-index:1;background:#ffffff;border-left:1px solid #e5e7eb;width:100%;max-width:440px;height:100vh;overflow-y:auto;padding:24px;animation:slideIn .25s ease}
+      @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+      .overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
+      .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(8px)}
+      @media(min-width:640px){.modal{align-items:center;padding:20px}}
+      .modal-box{background:#ffffff;border:1px solid #e5e7eb;border-radius:20px 20px 0 0;padding:28px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto}
+      @media(min-width:640px){.modal-box{border-radius:20px}}
+    `}</style>
 
-      {/* HEADER */}
-      <header style={{position:"sticky",top:0,zIndex:50,borderBottom:"1px solid #e5e7eb",background:"#ffffff",padding:"14px 20px"}}>
-        <div style={{maxWidth:1400,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
-          <div>
-            <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:"clamp(15px,3vw,20px)",fontWeight:800,color:"#1a1a1a"}}>
-              <span style={{color:"#00B4D8"}}>Concepción</span> Tecnología
-              <span style={{marginLeft:10,padding:"3px 10px",background:"rgba(59,130,246,.1)",border:"1px solid rgba(59,130,246,.3)",borderRadius:20,fontSize:11,color:"#3b82f6"}}>MAYORISTA</span>
-            </h1>
-            <p style={{fontSize:11,color:"#666",marginTop:2}}>Bienvenido, {regForm.name} · <span style={{color:"#ef4444",fontWeight:700}}>Compra mínima $80.000</span></p>
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            <a href="/" style={{padding:"7px 14px",borderRadius:8,background:"#f3f4f6",border:"1px solid #e5e7eb",color:"#444",fontSize:12,fontWeight:600,textDecoration:"none"}}>{"← Minorista"}</a>
-            {cartCount>0&&<button onClick={()=>setCartOpen(true)} style={{padding:"7px 16px",borderRadius:8,background:"#3b82f6",color:"#ffffff",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{"🛒 "}{cartCount}</button>}
-          </div>
-        </div>
-      </header>
+    {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
 
-      <main style={{maxWidth:1400,margin:"0 auto",padding:"24px 20px 100px"}}>
-        {/* BÚSQUEDA */}
-        <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-          <div style={{position:"relative",flex:1,minWidth:220}}>
-            <span style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",fontSize:15}}>🔍</span>
-            <input className="if3" style={{paddingLeft:40}} placeholder="Buscar producto..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          </div>
-          <select value={sort} onChange={e=>setSort(e.target.value as "default"|"asc"|"desc")}
-            style={{padding:"12px 14px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:10,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-            <option value="default">Ordenar</option>
-            <option value="desc">Mayor precio</option>
-            <option value="asc">Menor precio</option>
-          </select>
-        </div>
+    {/* HEADER COMPACTO */}
+<header style={{ position: "sticky", top: 0, zIndex: 50, borderBottom: "1px solid #e5e7eb", background: "#ffffff", padding: "10px 16px" }}>
+  <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+      <h1 style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, margin: 0 }}>
+        <span style={{ color: "#00B4D8" }}>Concepción</span> Tecnologia <span style={{ fontSize: 9, padding: "2px 6px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 4, color: "#3b82f6", verticalAlign: "middle" }}>MAYORISTA</span>
+      </h1>
+      {cartCount > 0 && (
+        <button onClick={() => setCartOpen(true)} style={{ padding: "5px 10px", borderRadius: 6, background: "#0077b6", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+          🛒 {cartCount}
+        </button>
+      )}
+    </div>
+    <p style={{ fontSize: 10, color: "#666", marginBottom: 8 }}>{regForm.name} · <span style={{ color: "#ef4444", fontWeight: 700 }}>Mínima $80.000</span></p>
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
+      <button onClick={() => setShowFavs(true)} style={{ padding: "4px 8px", borderRadius: 6, background: "#f9fafb", border: "1px solid #e5e7eb", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>❤️ Favoritos</button>
+      <button onClick={() => { setShowHistorial(true); loadHistorial(); }} style={{ padding: "4px 8px", borderRadius: 6, background: "#f9fafb", border: "1px solid #e5e7eb", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>Mis Pedidos</button>
+      <a href="/" style={{ padding: "4px 8px", borderRadius: 6, background: "#f9fafb", border: "1px solid #e5e7eb", fontSize: 10, fontWeight: 600, textDecoration: "none", color: "#444" }}>Minorista</a>
+    </div>
+  </div>
+</header>
 
-        {/* CATEGORÍAS */}
-        <div className="sx2" style={{marginBottom:18}}>
-          <button className={`pb2 ${!activeCat?"active":""}`} onClick={()=>setActiveCat(null)}>{"✦ Todos"}</button>
-          {categories.map(c=>(
-            <button key={c.id} className={`pb2 ${activeCat===c.slug?"active":""}`} onClick={()=>setActiveCat(activeCat===c.slug?null:c.slug)}>
-              {c.icon} {c.name}
-            </button>
-          ))}
-        </div>
+<main style={{ maxWidth: 1400, margin: "0 auto", padding: "12px 16px" }}>
+  {/* Buscador y Ordenador */}
+  <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+    <input className="if3" placeholder="Buscar precio mayorista" value={search} onChange={e => setSearch(e.target.value)} style={{ padding: "8px 12px", fontSize: 12, height: 38 }} />
+<select 
+  value={sort} 
+  onChange={(e) => setSort(e.target.value as "default" | "asc" | "desc")} 
+  style={{ /* ... tus estilos ... */ }}
+>
+  <option value="default">↕️</option>
+  <option value="desc">Más caro</option>
+  <option value="asc">Más barato</option>
+</select>      
+    
+  </div>
 
-        {/* PRODUCTOS */}
-        {Object.entries(grouped).map(([catName,prods])=>(
-          <MayoristaCategorySection key={catName} catName={catName} prods={prods}/>
-        ))}
-      </main>
+  {/* Categorías */}
+  <div className="sx2" style={{ marginBottom: 16 }}>
+    <button className={`pb2 ${!activeCat ? "active" : ""}`} onClick={() => setActiveCat(null)} style={{ padding: "5px 12px", fontSize: 12 }}>Todos</button>
+    {categories.map(c => (
+      <button key={c.id} className={`pb2 ${activeCat === c.slug ? "active" : ""}`} onClick={() => setActiveCat(activeCat === c.slug ? null : c.slug)} style={{ padding: "5px 12px", fontSize: 12 }}>{c.icon} {c.name}</button>
+    ))}
+  </div>
 
-      {/* BOTÓN SUBIR */}
-      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
-        style={{position:"fixed",bottom:cartCount>0?80:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(59,130,246,.15)",border:"1px solid rgba(59,130,246,.4)",color:"#3b82f6",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
-        ↑
-      </button>
-
-      {/* CARRITO FLOTANTE */}
+  {/* Listado de Productos */}
+  {Object.entries(grouped).map(([catName, prods]) => (
+    <MayoristaCategorySection key={catName} catName={catName} prods={prods} />
+  ))}
+</main>
+     {/* CARRITO FLOTANTE */}
       {cartCount>0&&!cartOpen&&(
         <button onClick={()=>setCartOpen(true)} style={{position:"fixed",bottom:20,right:20,zIndex:9001,background:"#3b82f6",color:"#fff",border:"none",borderRadius:50,padding:"13px 22px",fontSize:14,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 24px rgba(59,130,246,.4)",display:"flex",alignItems:"center",gap:8,fontFamily:"inherit"}}>
           {"🛒 Carrito "}
@@ -457,8 +500,7 @@ const hasLess = visibleCount > 6;
           </div>
         </div>
       )}
-
-      {/* MODAL CHECKOUT */}
+        {/* MODAL CHECKOUT */}
       {checkoutOpen&&!orderDone&&(
         <div className="modal">
           <div className="modal-box">
@@ -538,7 +580,103 @@ const hasLess = visibleCount > 6;
             </a>
           </div>
         </div>
+      
       )}
+
+    {/* BOTÓN SUBIR */}
+      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+        style={{position:"fixed",bottom:cartCount>0?72:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",color:"#00B4D8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",transition:"bottom .3s"}}>
+        ↑
+      </button>
+
+{/* MODAL FAVORITOS */}
+{showFavs && (
+  <div className="modal" onClick={() => setShowFavs(false)}>
+    <div className="modal-box" onClick={e => e.stopPropagation()}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 700 }}>Mis favoritos</h3>
+        <button onClick={() => setShowFavs(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
+      </div>
+      {favProds.length === 0 ? (
+        <p style={{ color: "#666", fontSize: 14, textAlign: "center", padding: "20px 0" }}>No tenés favoritos aún.</p>
+      ) : favProds.map((p: any) => (
+        <a href={`/mayorista/producto/${p.id}`} key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 10, background: "#f9fafb", borderRadius: 10, marginBottom: 8, textDecoration: "none" }}>
+          <img src={p.image_url || GENERIC} style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8 }} alt={p.name} />
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{p.name}</p>
+            <p style={{ fontSize: 13, color: "#3b82f6", fontWeight: 700 }}>{fmt(Number(p.price_wholesale))}</p>
+          </div>
+          {/* Solución: e.preventDefault() para que no navegue y e.stopPropagation() para que el clic no llegue al contenedor */}
+          <button 
+            onClick={(e) => { 
+              e.preventDefault(); 
+              e.stopPropagation(); 
+              toggleFav(p.id); 
+            }} 
+            style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer" }}
+          >
+            ❤️
+          </button>
+        </a>
+      ))}
     </div>
+  </div>
+)}
+
+{/* BOTÓN SUBIR */}
+      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+        style={{position:"fixed",bottom:cartCount>0?72:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",color:"#00B4D8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",transition:"bottom .3s"}}>
+        ↑
+      </button>
+
+    {/* MODAL HISTORIAL */}
+    {showHistorial && (
+      <div className="modal" onClick={() => setShowHistorial(false)}>
+        <div className="modal-box" onClick={e => e.stopPropagation()}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 700 }}>Mis pedidos</h3>
+            <button onClick={() => setShowHistorial(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+          {historial.map((o: any) => {
+            const items = Array.isArray(o.items) ? o.items : [];
+            return (
+              <div key={o.id} style={{ padding: 12, background: "#f9fafb", borderRadius: 10, marginBottom: 8, border: "1px solid #e5e7eb" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>Pedido #{String(o.id).padStart(4, "0")}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "#3b82f6" }}>{fmt(Number(o.total))}</p>
+                </div>
+                <p style={{ fontSize: 11, color: "#666" }}>{new Date(o.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                <p style={{ fontSize: 11, fontWeight: 600, marginTop: 4, color: o.status === "completed" ? "#10b981" : o.status === "cancelled" ? "#ef4444" : "#f59e0b" }}>
+                  {o.status === "completed" ? "Completado" : o.status === "cancelled" ? "Cancelado" : "Pendiente"}
+                </p>
+                {items.length > 0 && (
+                  <div style={{ marginTop: 8, borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
+                    {items.map((item: any, i: number) => (
+                      <p key={i} style={{ fontSize: 11, color: "#444", marginBottom: 2 }}>• {item.qty}x {item.name}</p>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button onClick={() => {
+                    items.forEach((item: any) => {
+                      const prod = products.find(p => p.name === item.name);
+                      if (prod) addToCart(prod);
+                    });
+                    setShowHistorial(false);
+                    setCartOpen(true);
+                  }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "rgba(59,130,246,.1)", border: "1px solid rgba(59,130,246,.3)", color: "#3b82f6", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Repetir pedido</button>
+                  <button onClick={() => {
+                    const lines = items.map((i: any) => `• ${i.qty}x ${i.name} — ${fmt(i.qty * Number(i.price))}`).join("\n");
+                    const msg = encodeURIComponent(`📦 *Repetir Pedido #${String(o.id).padStart(4, "0")} - Concepción Tecnología*\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*`);
+                    window.open(`https://wa.me/${WA}?text=${msg}`, "_blank");
+                  }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#25D366", border: "none", color: "white", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>WhatsApp</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+     )}
+  </div>
   );
 }

@@ -15,6 +15,28 @@ export default function ProductoMayoristaPage() {
   const [loading, setLoading] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [qty, setQty] = useState(1);
+  const [esFav, setEsFav] = useState(false);
+
+  const toggleFav = async () => {
+  const phone = localStorage.getItem("mayorista_phone") || "";
+  if (!phone) return;
+  if (esFav) {
+    await fetch("/api/favoritos",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,product_id:product.id})});
+  } else {
+    await fetch("/api/favoritos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone,product_id:product.id})});
+  }
+  setEsFav(!esFav);
+};
+
+
+  useEffect(()=>{
+  if (!product) return;
+  const phone = localStorage.getItem("mayorista_phone") || "";
+  if (!phone) return;
+  fetch(`/api/favoritos?phone=${phone}`)
+    .then(r=>r.json())
+    .then((favs:any[])=> setEsFav(favs.some(f=>f.id===product.id)));
+},[product]);
 
   useEffect(() => {
     const saved = localStorage.getItem("mayorista_cart");
@@ -96,6 +118,11 @@ export default function ProductoMayoristaPage() {
     </div>
   );
 
+
+
+
+
+
   return (
     <div style={{ minHeight: "100vh", background: "#f0f7ff", fontFamily: "'DM Sans', system-ui, sans-serif", paddingBottom: 100 }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}`}</style>
@@ -150,6 +177,10 @@ export default function ProductoMayoristaPage() {
           )}
 
           {/* INFO */}
+          <button onClick={toggleFav}
+  style={{background:"white",border:"1px solid #e5e7eb",borderRadius:"50%",width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:20,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,.08)"}}>
+  {esFav ? "❤️" : "🤍"}
+</button>
           <div style={{ padding: "20px 20px 24px" }}>
             <span style={{ background: "#e0f2fe", color: "#0077b6", padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
               📦 PRECIO MAYORISTA
