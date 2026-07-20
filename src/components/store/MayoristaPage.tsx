@@ -590,50 +590,74 @@ const MayoristaCategorySection = ({ catName, prods }: { catName: string; prods: 
       </button>
 {/* MODAL FAVORITOS */}
 {showFavs && (
-  <div className="modal" onClick={() => setShowFavs(false)}>
-    <div className="modal-box" onClick={e => e.stopPropagation()}>
+  <div 
+    onClick={() => setShowFavs(false)} 
+    style={{ 
+      position: "fixed", 
+      top: 0, 
+      left: 0, 
+      width: "100%", 
+      height: "100%", 
+      background: "rgba(0,0,0,0.5)", 
+      display: "flex", 
+      alignItems: "center", 
+      justifyContent: "center", 
+      zIndex: 1000,
+      backdropFilter: "blur(2px)" 
+    }}
+  >
+    <div 
+      onClick={e => e.stopPropagation()} 
+      style={{ 
+        background: "#ffffff", 
+        width: "90%", 
+        maxWidth: "450px", 
+        maxHeight: "80vh", 
+        borderRadius: "20px", 
+        padding: "20px", 
+        boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
+        display: "flex",
+        flexDirection: "column"
+      }}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 700 }}>Mis favoritos</h3>
-        <button onClick={() => setShowFavs(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
+        <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 700, margin: 0 }}>Mis favoritos</h3>
+        <button onClick={() => setShowFavs(false)} style={{ background: "#f3f4f6", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
       </div>
 
-      {favProds.length === 0 ? (
-        <p style={{ textAlign: "center", color: "#666", fontSize: 13 }}>No tenés productos favoritos.</p>
-      ) : (
-        favProds.map((p: any) => {
-          const inCart = cart.find(i => i.id === p.id);
-          return (
-            <div key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 8, background: "#f9fafb", borderRadius: 10, marginBottom: 8, border: "1px solid #e5e7eb" }}>
-              {/* Imagen y nombre con enlace */}
-              <a href={`/mayorista/producto/${p.id}`} style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, textDecoration: "none", color: "inherit", minWidth: 0 }}>
-                <img src={p.image_url || GENERIC} style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8 }} alt={p.name} />
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
-                  <p style={{ fontSize: 13, color: "#3b82f6", fontWeight: 700 }}>{fmt(Number(p.price_wholesale))}</p>
-                </div>
-              </a>
+      <div style={{ overflowY: "auto", flex: 1 }}>
+        {favProds.length === 0 ? (
+          <p style={{ textAlign: "center", color: "#666", fontSize: 13, padding: "20px 0" }}>No tenés productos favoritos.</p>
+        ) : (
+          favProds.map((p: any) => {
+            const inCart = cart.find(i => i.id === p.id);
+            return (
+              <div key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 8, background: "#f9fafb", borderRadius: 10, marginBottom: 8, border: "1px solid #e5e7eb" }}>
+                <a href={`/mayorista/producto/${p.id}`} style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, textDecoration: "none", color: "inherit", minWidth: 0 }}>
+                  <img src={p.image_url || GENERIC} style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8 }} alt={p.name} />
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
+                    <p style={{ fontSize: 13, color: "#3b82f6", fontWeight: 700 }}>{fmt(Number(p.price_wholesale))}</p>
+                  </div>
+                </a>
 
-              {/* Botones de acción (Separados del enlace) */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <button onClick={(e) => { e.preventDefault(); updateQty(p.id, -1); }}
-                  style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid rgba(59,130,246,.3)", background: "#fff", color: "#3b82f6", cursor: "pointer" }}>−</button>
-                
-                <span style={{ fontSize: 13, fontWeight: 600, minWidth: 20, textAlign: "center" }}>{inCart?.qty || 0}</span>
-                
-                <button onClick={(e) => { e.preventDefault(); addToCart(p); }}
-                  style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "#3b82f6", color: "#fff", cursor: "pointer" }}>+</button>
-                
-                <button onClick={(e) => { e.preventDefault(); toggleFav(p.id); }}
-                  style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", marginLeft: 4 }}>❤️</button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <button onClick={(e) => { e.preventDefault(); updateQty(p.id, -1); }}
+                    style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid rgba(59,130,246,.3)", background: "#fff", color: "#3b82f6", cursor: "pointer" }}>−</button>
+                  <span style={{ fontSize: 13, fontWeight: 600, minWidth: 20, textAlign: "center" }}>{inCart?.qty || 0}</span>
+                  <button onClick={(e) => { e.preventDefault(); addToCart(p); }}
+                    style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "#3b82f6", color: "#fff", cursor: "pointer" }}>+</button>
+                  <button onClick={(e) => { e.preventDefault(); toggleFav(p.id); }}
+                    style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", marginLeft: 4 }}>❤️</button>
+                </div>
               </div>
-            </div>
-          );
-        })
-      )}
+            );
+          })
+        )}
+      </div>
     </div>
   </div>
 )}
-
 {/* BOTÓN SUBIR */}
       <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
         style={{position:"fixed",bottom:cartCount>0?72:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",color:"#00B4D8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",transition:"bottom .3s"}}>
@@ -641,53 +665,44 @@ const MayoristaCategorySection = ({ catName, prods }: { catName: string; prods: 
       </button>
 
     {/* MODAL HISTORIAL */}
-    {showHistorial && (
-      <div className="modal" onClick={() => setShowHistorial(false)}>
-        <div className="modal-box" onClick={e => e.stopPropagation()}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 700 }}>Mis pedidos</h3>
-            <button onClick={() => setShowHistorial(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
-          </div>
-          {historial.map((o: any) => {
-            const items = Array.isArray(o.items) ? o.items : [];
-            return (
-              <div key={o.id} style={{ padding: 12, background: "#f9fafb", borderRadius: 10, marginBottom: 8, border: "1px solid #e5e7eb" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>Pedido #{String(o.id).padStart(4, "0")}</p>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: "#3b82f6" }}>{fmt(Number(o.total))}</p>
-                </div>
-                <p style={{ fontSize: 11, color: "#666" }}>{new Date(o.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}</p>
-                <p style={{ fontSize: 11, fontWeight: 600, marginTop: 4, color: o.status === "completed" ? "#10b981" : o.status === "cancelled" ? "#ef4444" : "#f59e0b" }}>
-                  {o.status === "completed" ? "Completado" : o.status === "cancelled" ? "Cancelado" : "Pendiente"}
-                </p>
-                {items.length > 0 && (
-                  <div style={{ marginTop: 8, borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
-                    {items.map((item: any, i: number) => (
-                      <p key={i} style={{ fontSize: 11, color: "#444", marginBottom: 2 }}>• {item.qty}x {item.name}</p>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <button onClick={() => {
-                    items.forEach((item: any) => {
-                      const prod = products.find(p => p.name === item.name);
-                      if (prod) addToCart(prod);
-                    });
-                    setShowHistorial(false);
-                    setCartOpen(true);
-                  }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "rgba(59,130,246,.1)", border: "1px solid rgba(59,130,246,.3)", color: "#3b82f6", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Repetir pedido</button>
-                  <button onClick={() => {
-                    const lines = items.map((i: any) => `• ${i.qty}x ${i.name} — ${fmt(i.qty * Number(i.price))}`).join("\n");
-                    const msg = encodeURIComponent(`📦 *Repetir Pedido #${String(o.id).padStart(4, "0")} - Concepción Tecnología*\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*`);
-                    window.open(`https://wa.me/${WA}?text=${msg}`, "_blank");
-                  }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#25D366", border: "none", color: "white", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>WhatsApp</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+{showHistorial && (
+  <div className="modal" onClick={() => setShowHistorial(false)} style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(2px)" }}>
+    <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: "#ffffff", width: "90%", maxWidth: "450px", maxHeight: "80vh", borderRadius: "20px", padding: "20px", display: "flex", flexDirection: "column", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 700 }}>Mis pedidos</h3>
+        <button onClick={() => setShowHistorial(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
       </div>
-     )}
+      <div style={{ overflowY: "auto", flex: 1, paddingRight: "4px" }}>
+        {historial.map((o: any) => {
+          const items = Array.isArray(o.items) ? o.items : [];
+          return (
+            <div key={o.id} style={{ padding: 12, background: "#f9fafb", borderRadius: 10, marginBottom: 8, border: "1px solid #e5e7eb" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>Pedido #{String(o.id).padStart(4, "0")}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#3b82f6" }}>{fmt(Number(o.total))}</p>
+              </div>
+              <p style={{ fontSize: 11, color: "#666" }}>{new Date(o.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}</p>
+              <p style={{ fontSize: 11, fontWeight: 600, marginTop: 4, color: o.status === "completed" ? "#10b981" : o.status === "cancelled" ? "#ef4444" : "#f59e0b" }}>
+                {o.status === "completed" ? "Completado" : o.status === "cancelled" ? "Cancelado" : "Pendiente"}
+              </p>
+              {items.length > 0 && (
+                <div style={{ marginTop: 8, borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>
+                  {items.map((item: any, i: number) => (
+                    <p key={i} style={{ fontSize: 11, color: "#444", marginBottom: 2 }}>• {item.qty}x {item.name}</p>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button onClick={() => { items.forEach((item: any) => { const prod = products.find(p => p.name === item.name); if (prod) addToCart(prod); }); setShowHistorial(false); setCartOpen(true); }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "rgba(59,130,246,.1)", border: "1px solid rgba(59,130,246,.3)", color: "#3b82f6", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Repetir pedido</button>
+                <button onClick={() => { const lines = items.map((i: any) => `• ${i.qty}x ${i.name} — ${fmt(i.qty * Number(i.price))}`).join("\n"); const msg = encodeURIComponent(`📦 *Repetir Pedido #${String(o.id).padStart(4, "0")} - Concepción Tecnología*\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*`); window.open(`https://wa.me/${WA}?text=${msg}`, "_blank"); }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#25D366", border: "none", color: "white", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>WhatsApp</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+)}
   </div>
   );
 }
