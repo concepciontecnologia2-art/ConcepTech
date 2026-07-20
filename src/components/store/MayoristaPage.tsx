@@ -588,7 +588,6 @@ const MayoristaCategorySection = ({ catName, prods }: { catName: string; prods: 
         style={{position:"fixed",bottom:cartCount>0?72:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",color:"#00B4D8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",transition:"bottom .3s"}}>
         ↑
       </button>
-
 {/* MODAL FAVORITOS */}
 {showFavs && (
   <div className="modal" onClick={() => setShowFavs(false)}>
@@ -597,28 +596,40 @@ const MayoristaCategorySection = ({ catName, prods }: { catName: string; prods: 
         <h3 style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 700 }}>Mis favoritos</h3>
         <button onClick={() => setShowFavs(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
       </div>
+
       {favProds.length === 0 ? (
-        <p style={{ color: "#666", fontSize: 14, textAlign: "center", padding: "20px 0" }}>No tenés favoritos aún.</p>
-      ) : favProds.map((p: any) => (
-        <a href={`/mayorista/producto/${p.id}`} key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 10, background: "#f9fafb", borderRadius: 10, marginBottom: 8, textDecoration: "none" }}>
-          <img src={p.image_url || GENERIC} style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8 }} alt={p.name} />
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "#1a1a1a" }}>{p.name}</p>
-            <p style={{ fontSize: 13, color: "#3b82f6", fontWeight: 700 }}>{fmt(Number(p.price_wholesale))}</p>
-          </div>
-          {/* Solución: e.preventDefault() para que no navegue y e.stopPropagation() para que el clic no llegue al contenedor */}
-          <button 
-            onClick={(e) => { 
-              e.preventDefault(); 
-              e.stopPropagation(); 
-              toggleFav(p.id); 
-            }} 
-            style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer" }}
-          >
-            ❤️
-          </button>
-        </a>
-      ))}
+        <p style={{ textAlign: "center", color: "#666", fontSize: 13 }}>No tenés productos favoritos.</p>
+      ) : (
+        favProds.map((p: any) => {
+          const inCart = cart.find(i => i.id === p.id);
+          return (
+            <div key={p.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 8, background: "#f9fafb", borderRadius: 10, marginBottom: 8, border: "1px solid #e5e7eb" }}>
+              {/* Imagen y nombre con enlace */}
+              <a href={`/mayorista/producto/${p.id}`} style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, textDecoration: "none", color: "inherit", minWidth: 0 }}>
+                <img src={p.image_url || GENERIC} style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8 }} alt={p.name} />
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
+                  <p style={{ fontSize: 13, color: "#3b82f6", fontWeight: 700 }}>{fmt(Number(p.price_wholesale))}</p>
+                </div>
+              </a>
+
+              {/* Botones de acción (Separados del enlace) */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button onClick={(e) => { e.preventDefault(); updateQty(p.id, -1); }}
+                  style={{ width: 28, height: 28, borderRadius: "50%", border: "1px solid rgba(59,130,246,.3)", background: "#fff", color: "#3b82f6", cursor: "pointer" }}>−</button>
+                
+                <span style={{ fontSize: 13, fontWeight: 600, minWidth: 20, textAlign: "center" }}>{inCart?.qty || 0}</span>
+                
+                <button onClick={(e) => { e.preventDefault(); addToCart(p); }}
+                  style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "#3b82f6", color: "#fff", cursor: "pointer" }}>+</button>
+                
+                <button onClick={(e) => { e.preventDefault(); toggleFav(p.id); }}
+                  style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", marginLeft: 4 }}>❤️</button>
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   </div>
 )}

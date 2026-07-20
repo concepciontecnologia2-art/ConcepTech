@@ -649,6 +649,37 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
             )}
           </div>
         )}
+       {products.filter((p: any) => !p.image_url).length > 0 && (
+  <div style={{ ...card, marginTop: 12 }}>
+    <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: "#1a1a1a" }}>📷 Sin foto</h3>
+    <p style={{ fontSize: 12, color: "#666", marginBottom: 10 }}>{products.filter((p: any) => !p.image_url).length} productos sin imagen</p>
+    
+    <div style={{ maxHeight: "180px", overflowY: "auto", paddingRight: "4px" }}>
+      {products.filter((p: any) => !p.image_url).map((p: any) => (
+        <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 11px", background: "rgba(245,158,11,.05)", border: "1px solid rgba(245,158,11,.15)", borderRadius: 8, marginBottom: 7 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 12, fontWeight: 500, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
+            <p style={{ fontSize: 11, color: "#666" }}>{p.category_name}</p>
+          </div>
+          <label style={{ padding: "5px 10px", borderRadius: 6, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.3)", color: "#f59e0b", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+            📷 Subir
+            <input type="file" accept="image/*" style={{ display: "none" }}
+              onChange={async e => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const fd = new FormData();
+                fd.append("file", f);
+                const res = await fetch("/api/upload", { method: "POST", credentials: "include", body: fd });
+                const json = await res.json();
+                if (json.url) await patchProduct(p.id, { image_url: json.url });
+                e.target.value = "";
+              }} />
+          </label>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
         {/* PEDIDOS */}
         {tab==="orders"&&(
