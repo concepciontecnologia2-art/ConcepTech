@@ -711,7 +711,6 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
           </div>
         )}
         
-
 {/* PRODUCTOS */}
 {tab==="products"&&(
   <div>
@@ -750,7 +749,6 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
       </div>
     </div>
 
-    {/* BÚSQUEDA Y FILTROS (Solo dentro de Productos) */}
     <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
       <div style={{position:"relative",flex:1,minWidth:180}}>
         <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13}}>🔍</span>
@@ -766,6 +764,79 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
         </button>
       ))}
     </div>
+
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {filteredProdsPaged.map((p:any)=>(
+        <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
+          {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
+          <div style={{flex:1,minWidth:0}}>
+            <select value={p.category_id} onChange={e=>patchProduct(p.id,{category_id:Number(e.target.value)})}
+              style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2}}>
+              {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+            </select>
+            <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
+            <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
+              <span style={{fontSize:11,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:4}}>
+              <select value={p.stock_level} onChange={e=>patchProduct(p.id,{stock_level:e.target.value})}
+                style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:10,borderRadius:6,padding:"2px 6px"}}>
+                <option value="alto">🟢 Alto</option>
+                <option value="medio">🟡 Medio</option>
+                <option value="bajo">🔴 Bajo</option>
+              </select>
+              <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
+              <input type="number" min="0" value={p.stock_quantity??0}
+                onChange={e=>setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,stock_quantity:Number(e.target.value)}:pp))}
+                onBlur={e=>{
+                  const qty = Number(e.target.value);
+                  patchProduct(p.id,{
+                    stock_quantity: qty,
+                    stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
+                    available: qty > 0,
+                  });
+                }} 
+                style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
+            <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
+              <div className="thumb" style={{left:p.available?18:3}}/>
+            </button>
+            <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",minWidth:32,minHeight:28}}>
+              <span>{uploadingId===p.id?"⏳":"📷"}</span>
+              <input type="file" accept="image/*" style={{display:"none"}}
+                onChange={async e=>{
+                  const f=e.target.files?.[0];
+                  if(!f) return;
+                  setUploadingId(p.id);
+                  const fd = new FormData();
+                  fd.append("file", f);
+                  try {
+                    const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+                    const json = await res.json();
+                    if (json.url) {
+                      await fetch(`/api/products/${p.id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:json.url})});
+                      setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,image_url:json.url}:pp));
+                    }
+                  } catch(e){ alert("Error al subir"); }
+                  setUploadingId(null);
+                  e.target.value="";
+                }}/>
+            </label>
+            <button style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>✏️</button>
+            <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
+          </div>
+        </div>
+      ))}
+      {hasMoreProds&&(
+        <button onClick={()=>setProdPage(p=>p+1)}
+          style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#00B4D8",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+          Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
+        </button>
+      )}
+    </div>
   </div>
 )}
 
@@ -779,115 +850,42 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
       </div>
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      {products.filter((p:any)=>!p.image_url).map((p:any)=>(
-        <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
-          <div style={{width:48,height:48,borderRadius:8,background:"#f3f4f6",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📷</div>
-          <div style={{flex:1,minWidth:0}}>
-            <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
-            <p style={{fontSize:11,color:"#666",marginTop:2}}>{p.category_name}</p>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
-              <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
-              <span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:6,
-                color:Number(p.stock_quantity)===0?"#ef4444":Number(p.stock_quantity)<=3?"#ef4444":Number(p.stock_quantity)<=10?"#f59e0b":"#10b981",
-                background:Number(p.stock_quantity)===0?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=3?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=10?"rgba(245,158,11,.1)":"rgba(16,185,129,.1)"}}>
-                {Number(p.stock_quantity)===0?"Sin stock":Number(p.stock_quantity)<=3?"Bajo":Number(p.stock_quantity)<=10?"Medio":"Alto"}
-              </span>
+      {products
+        .filter((p:any) => !p.image_url)
+        .map((p:any)=>(
+          <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
+            <div style={{width:48,height:48,borderRadius:8,background:"#f3f4f6",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📷</div>
+            <div style={{flex:1,minWidth:0}}>
+              <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
+              <p style={{fontSize:11,color:"#666",marginTop:2}}>{p.category_name}</p>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+                <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:6,
+                  color:Number(p.stock_quantity)===0?"#ef4444":Number(p.stock_quantity)<=3?"#ef4444":Number(p.stock_quantity)<=10?"#f59e0b":"#10b981",
+                  background:Number(p.stock_quantity)===0?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=3?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=10?"rgba(245,158,11,.1)":"rgba(16,185,129,.1)"}}>
+                  {Number(p.stock_quantity)===0?"Sin stock":Number(p.stock_quantity)<=3?"Bajo":Number(p.stock_quantity)<=10?"Medio":"Alto"}
+                </span>
+              </div>
             </div>
+            <label style={{padding:"8px 12px",borderRadius:8,background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",color:"#f59e0b",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+              Subir foto
+              <input type="file" accept="image/*" style={{display:"none"}}
+                onChange={async e=>{
+                  const f=e.target.files?.[0];
+                  if(!f) return;
+                  const fd=new FormData();
+                  fd.append("file",f);
+                  const res=await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+                  const json=await res.json();
+                  if(json.url) await patchProduct(p.id,{image_url:json.url});
+                  e.target.value="";
+                }}/>
+            </label>
           </div>
-          <label style={{padding:"8px 12px",borderRadius:8,background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",color:"#f59e0b",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
-            Subir foto
-            <input type="file" accept="image/*" style={{display:"none"}}
-              onChange={async e=>{
-                const f=e.target.files?.[0];
-                if(!f) return;
-                const fd=new FormData();
-                fd.append("file",f);
-                const res=await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
-                const json=await res.json();
-                if(json.url) await patchProduct(p.id,{image_url:json.url});
-                e.target.value="";
-              }}/>
-          </label>
-        </div>
       ))}
     </div>
   </div>
 )}
-
-{/* LISTA DE PRODUCTOS */}
-<div style={{display:"flex",flexDirection:"column",gap:8}}>
-  {filteredProdsPaged.map((p:any)=>(
-    <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
-      {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
-      <div style={{flex:1,minWidth:0}}>
-        <select value={p.category_id} onChange={e=>patchProduct(p.id,{category_id:Number(e.target.value)})}
-          style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2}}>
-          {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-        </select>
-        <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
-        <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
-          <span style={{fontSize:11,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</span>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:4}}>
-          <select value={p.stock_level} onChange={e=>patchProduct(p.id,{stock_level:e.target.value})}
-            style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:10,borderRadius:6,padding:"2px 6px"}}>
-            <option value="alto">🟢 Alto</option>
-            <option value="medio">🟡 Medio</option>
-            <option value="bajo">🔴 Bajo</option>
-          </select>
-          <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
-          <input type="number" min="0" value={p.stock_quantity??0}
-            onChange={e=>setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,stock_quantity:Number(e.target.value)}:pp))}
-            onBlur={e=>{
-              const qty = Number(e.target.value);
-              patchProduct(p.id,{
-                stock_quantity: qty,
-                stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
-                available: qty > 0,
-              });
-            }} 
-            style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
-        </div>
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
-        <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
-          <div className="thumb" style={{left:p.available?18:3}}/>
-        </button>
-        <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",minWidth:32,minHeight:28}}>
-          <span>{uploadingId===p.id?"⏳":"📷"}</span>
-          <input type="file" accept="image/*" style={{display:"none"}}
-            onChange={async e=>{
-              const f=e.target.files?.[0];
-              if(!f) return;
-              setUploadingId(p.id);
-              const fd = new FormData();
-              fd.append("file", f);
-              try {
-                const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
-                const json = await res.json();
-                if (json.url) {
-                  await fetch(`/api/products/${p.id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:json.url})});
-                  setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,image_url:json.url}:pp));
-                }
-              } catch(e){ alert("Error al subir"); }
-              setUploadingId(null);
-              e.target.value="";
-            }}/>
-        </label>
-        <button style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>✏️</button>
-        <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
-      </div>
-    </div>
-  ))}
-  {hasMoreProds&&(
-    <button onClick={()=>setProdPage(p=>p+1)}
-      style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#00B4D8",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
-      Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
-    </button>
-  )}
-</div>
-</div>
 
 
 {/* BOTÓN SUBIR */}
@@ -1016,6 +1014,7 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
     </div>
   </div>
 )}
+</div>
 </div>
 );
 }
