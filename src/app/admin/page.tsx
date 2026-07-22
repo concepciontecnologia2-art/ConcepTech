@@ -156,7 +156,7 @@ function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; p
 }
 
 function Panel({ onLogout }: { onLogout:()=>void }) {
-  const [tab, setTab]               = useState<"dashboard"|"orders"|"products">("dashboard");
+  const [tab, setTab] = useState<"dashboard"|"orders"|"products"|"sinfoto">("dashboard");
   const [orders, setOrders]         = useState<any[]>([]);
   const [products, setProducts]     = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -570,15 +570,15 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
         <button onClick={onLogout} style={{padding:"6px 12px",borderRadius:7,background:"#f3f4f6",border:"1px solid #e5e7eb",color:"#444",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Salir</button>
       </div>
 
-      {/* NAV TABS */}
-      <div className="admin-nav">
-        {([["dashboard","◈","Dashboard"],["orders","📋","Pedidos"],["products","📦","Productos"]] as const).map(([id,icon,label])=>(
-          <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>
-            {icon} {label}
-            {id==="orders"&&pendingCount>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,padding:"1px 6px",fontSize:10,fontWeight:800}}>{pendingCount}</span>}
-          </button>
-        ))}
-      </div>
+     {/* NAV TABS */}
+<div className="admin-nav">
+  {([["dashboard","◈","Dashboard"],["orders","📋","Pedidos"],["products","📦","Productos"],["sinfoto","📷","Sin foto"]] as const).map(([id,icon,label])=>(
+    <button key={id} className={`nav-btn ${tab===id?"active":""}`} onClick={()=>setTab(id)}>
+      {icon} {label}
+      {id==="orders"&&pendingCount>0&&<span style={{background:"#f59e0b",color:"#fff",borderRadius:20,padding:"1px 6px",fontSize:10,fontWeight:800}}>{pendingCount}</span>}
+    </button>
+  ))}
+</div>
 
       <div className="admin-content">
 
@@ -649,38 +649,7 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
             )}
           </div>
         )}
-       {products.filter((p: any) => !p.image_url).length > 0 && (
-  <div style={{ ...card, marginTop: 12 }}>
-    <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: "#1a1a1a" }}>📷 Sin foto</h3>
-    <p style={{ fontSize: 12, color: "#666", marginBottom: 10 }}>{products.filter((p: any) => !p.image_url).length} productos sin imagen</p>
-    
-    <div style={{ maxHeight: "180px", overflowY: "auto", paddingRight: "4px" }}>
-      {products.filter((p: any) => !p.image_url).map((p: any) => (
-        <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 11px", background: "rgba(245,158,11,.05)", border: "1px solid rgba(245,158,11,.15)", borderRadius: 8, marginBottom: 7 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 12, fontWeight: 500, color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
-            <p style={{ fontSize: 11, color: "#666" }}>{p.category_name}</p>
-          </div>
-          <label style={{ padding: "5px 10px", borderRadius: 6, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.3)", color: "#f59e0b", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-            📷 Subir
-            <input type="file" accept="image/*" style={{ display: "none" }}
-              onChange={async e => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                const fd = new FormData();
-                fd.append("file", f);
-                const res = await fetch("/api/upload", { method: "POST", credentials: "include", body: fd });
-                const json = await res.json();
-                if (json.url) await patchProduct(p.id, { image_url: json.url });
-                e.target.value = "";
-              }} />
-          </label>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
-
+       
         {/* PEDIDOS */}
         {tab==="orders"&&(
           <div>
@@ -741,311 +710,350 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
             </div>
           </div>
         )}
+        
 
-        {/* PRODUCTOS */}
-        {tab==="products"&&(
-          <div>
-            <PriceAdjuster
-              categories={categories}
-              products={products}
-              onAdjust={async(ids,pct)=>{
-                for (const id of ids) {
-                  const p = products.find((p:any)=>p.id===id);
-                  if(!p) continue;
-                  const newRetail    = Math.round(Number(p.price_retail)    * (1+pct/100));
-                  const newWholesale = Math.round(Number(p.price_wholesale) * (1+pct/100));
-                  await fetch(`/api/products/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({price_retail:newRetail,price_wholesale:newWholesale})});
-                }
-                const updated = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
-                setProducts(Array.isArray(updated)?updated:[]);
-                alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
-              }}
-            />
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
-              <div>
-                <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Productos</h2>
-                <p style={{color:"#666",fontSize:12}}>{products.length} productos · {products.filter((p:any)=>p.available).length} disponibles</p>
-              </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button style={{...btn("default"),padding:"9px 16px",fontSize:13}} onClick={exportExcel}>
-                  📊 Exportar
-                </button>
-                <label style={{...btn("cyan"),padding:"9px 16px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-                  {importing?"⏳":"📥 Importar"}
-                  <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
-                    onChange={e=>{const f=e.target.files?.[0]; if(f) importExcel(f); e.target.value="";}}
-                    disabled={importing}/>
-                </label>
-                <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar</button>
-              </div>
-            </div>
-
-            {/* BÚSQUEDA Y FILTROS */}
-            <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-              <div style={{position:"relative",flex:1,minWidth:180}}>
-                <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13}}>🔍</span>
-                <input value={searchProd} onChange={e=>{setSearchProd(e.target.value); setProdPage(1);}} placeholder="Buscar producto..."
-                  style={{width:"100%",padding:"8px 10px 8px 30px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,fontSize:12,outline:"none",fontFamily:"inherit",color:"#1a1a1a"}}/>
-              </div>
-            </div>
-            <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
-              {["all",...uniqueCats].map(c=>(
-                <button key={c as string} onClick={()=>{setCatFilter(c as string); setProdPage(1);}}
-                  style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${catFilter===c?"rgba(0,180,216,.4)":"#e5e7eb"}`,background:catFilter===c?"rgba(0,180,216,.1)":"#ffffff",color:catFilter===c?"#00B4D8":"#444",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
-                  {c==="all"?"Todos":c as string}
-                </button>
-              ))}
-            </div>
-
-            {/* LISTA DE PRODUCTOS */}
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {filteredProdsPaged.map((p:any)=>(
-                <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
-                  {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
-                  <div style={{flex:1,minWidth:0}}>
-                    <select value={p.category_id} onChange={e=>patchProduct(p.id,{category_id:Number(e.target.value)})}
-                      style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2}}>
-                      {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-                    </select>
-                    <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
-                    <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
-                      <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
-                      <span style={{fontSize:11,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</span>
-                    </div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:4}}>
-                      <select value={p.stock_level} onChange={e=>patchProduct(p.id,{stock_level:e.target.value})}
-                        style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:10,borderRadius:6,padding:"2px 6px"}}>
-                        <option value="alto">🟢 Alto</option>
-                        <option value="medio">🟡 Medio</option>
-                        <option value="bajo">🔴 Bajo</option>
-                      </select>
-                      <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
-                      <input type="number" min="0" value={p.stock_quantity??0}
-  onChange={e=>setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,stock_quantity:Number(e.target.value)}:pp))}
-    onBlur={e=>{
-  const qty = Number(e.target.value);
-  patchProduct(p.id,{
-    stock_quantity: qty,
-    stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
-    available: qty > 0,
-  });
-  {hasMoreProds&&(
-  <button onClick={()=>setProdPage(p=>p+1)}
-    style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#00B4D8",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
-    Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
-  </button>
-)}
-}} 
- style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
-                    <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
-                      <div className="thumb" style={{left:p.available?18:3}}/>
-                    </button>
-                    <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",minWidth:32,minHeight:28}}>
-  <span>{uploadingId===p.id?"⏳":"📷"}</span>
-  <input type="file" accept="image/*" style={{display:"none"}}
-    onChange={async e=>{
-      const f=e.target.files?.[0];
-      if(!f) return;
-      setUploadingId(p.id);
-      const fd = new FormData();
-      fd.append("file", f);
-      try {
-        const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
-        const json = await res.json();
-        if (json.url) {
-          await fetch(`/api/products/${p.id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:json.url})});
-          setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,image_url:json.url}:pp));
+{/* PRODUCTOS */}
+{tab==="products"&&(
+  <div>
+    <PriceAdjuster
+      categories={categories}
+      products={products}
+      onAdjust={async(ids,pct)=>{
+        for (const id of ids) {
+          const p = products.find((p:any)=>p.id===id);
+          if(!p) continue;
+          const newRetail   = Math.round(Number(p.price_retail)   * (1+pct/100));
+          const newWholesale = Math.round(Number(p.price_wholesale) * (1+pct/100));
+          await fetch(`/api/products/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({price_retail:newRetail,price_wholesale:newWholesale})});
         }
-      } catch(e){ alert("Error al subir"); }
-      setUploadingId(null);
-      e.target.value="";
-    }}/>
-</label>
-                    <button style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>✏️</button>
-                    <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
-                  </div>
-                </div>
-              ))}
-              {hasMoreProds&&(
-  <button onClick={()=>setProdPage(p=>p+1)}
-    style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#00B4D8",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
-    Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
-  </button>
-)}
-            </div>
-          </div>
-        )}
+        const updated = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
+        setProducts(Array.isArray(updated)?updated:[]);
+        alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
+      }}
+    />
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
+      <div>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Productos</h2>
+        <p style={{color:"#666",fontSize:12}}>{products.length} productos · {products.filter((p:any)=>p.available).length} disponibles</p>
       </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button style={{...btn("default"),padding:"9px 16px",fontSize:13}} onClick={exportExcel}>
+          📊 Exportar
+        </button>
+        <label style={{...btn("cyan"),padding:"9px 16px",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+          {importing?"⏳":"📥 Importar"}
+          <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
+            onChange={e=>{const f=e.target.files?.[0]; if(f) importExcel(f); e.target.value="";}}
+            disabled={importing}/>
+        </label>
+        <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)}>+ Agregar</button>
+      </div>
+    </div>
 
-      {/* BOTÓN SUBIR */}
-      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
-        style={{position:"fixed",bottom:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",color:"#00B4D8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
-        ↑
-      </button>
+    {/* BÚSQUEDA Y FILTROS (Solo dentro de Productos) */}
+    <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+      <div style={{position:"relative",flex:1,minWidth:180}}>
+        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13}}>🔍</span>
+        <input value={searchProd} onChange={e=>{setSearchProd(e.target.value); setProdPage(1);}} placeholder="Buscar producto..."
+          style={{width:"100%",padding:"8px 10px 8px 30px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,fontSize:12,outline:"none",fontFamily:"inherit",color:"#1a1a1a"}}/>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+      {["all",...uniqueCats].map(c=>(
+        <button key={c as string} onClick={()=>{setCatFilter(c as string); setProdPage(1);}}
+          style={{padding:"5px 12px",borderRadius:7,border:`1px solid ${catFilter===c?"rgba(0,180,216,.4)":"#e5e7eb"}`,background:catFilter===c?"rgba(0,180,216,.1)":"#ffffff",color:catFilter===c?"#00B4D8":"#444",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
+          {c==="all"?"Todos":c as string}
+        </button>
+      ))}
+    </div>
+  </div>
+)}
 
-      {/* MODAL EDITAR */}
-      {editingProduct&&(
-        <div className="mo" onClick={()=>setEditingProduct(null)}>
-          <div className="mb" onClick={e=>e.stopPropagation()}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-              <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,color:"#1a1a1a"}}>Editar producto</h3>
-              <button onClick={()=>setEditingProduct(null)} style={{background:"none",border:"none",color:"#666",fontSize:20,cursor:"pointer"}}>✕</button>
+{/* SIN FOTO (Independiente) */}
+{tab==="sinfoto"&&(
+  <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+      <div>
+        <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#1a1a1a"}}>Sin foto</h2>
+        <p style={{color:"#666",fontSize:12}}>{products.filter((p:any)=>!p.image_url).length} productos sin imagen</p>
+      </div>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {products.filter((p:any)=>!p.image_url).map((p:any)=>(
+        <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
+          <div style={{width:48,height:48,borderRadius:8,background:"#f3f4f6",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📷</div>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
+            <p style={{fontSize:11,color:"#666",marginTop:2}}>{p.category_name}</p>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+              <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
+              <span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:6,
+                color:Number(p.stock_quantity)===0?"#ef4444":Number(p.stock_quantity)<=3?"#ef4444":Number(p.stock_quantity)<=10?"#f59e0b":"#10b981",
+                background:Number(p.stock_quantity)===0?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=3?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=10?"rgba(245,158,11,.1)":"rgba(16,185,129,.1)"}}>
+                {Number(p.stock_quantity)===0?"Sin stock":Number(p.stock_quantity)<=3?"Bajo":Number(p.stock_quantity)<=10?"Medio":"Alto"}
+              </span>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:11}}>
+          </div>
+          <label style={{padding:"8px 12px",borderRadius:8,background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",color:"#f59e0b",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+            Subir foto
+            <input type="file" accept="image/*" style={{display:"none"}}
+              onChange={async e=>{
+                const f=e.target.files?.[0];
+                if(!f) return;
+                const fd=new FormData();
+                fd.append("file",f);
+                const res=await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+                const json=await res.json();
+                if(json.url) await patchProduct(p.id,{image_url:json.url});
+                e.target.value="";
+              }}/>
+          </label>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
-              {/* FOTOS ADICIONALES */}
-              <div>
-                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:8,fontWeight:600}}>FOTOS ADICIONALES</label>
-                {loadingImages ? (
-                  <p style={{fontSize:12,color:"#666"}}>Cargando...</p>
-                ) : (
-                  <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
-                    {extraImages.map((img:any)=>(
-                      <div key={img.id} style={{position:"relative",width:70,height:70}}>
-                        <img src={img.image_url} style={{width:70,height:70,borderRadius:8,objectFit:"cover"}}/>
-                        <button onClick={()=>deleteExtraPhoto(editingProduct.id, img.id)}
-                          style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    <label style={{width:70,height:70,borderRadius:8,border:"2px dashed #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:24,color:"#999"}}>
-                      +
-                      <input type="file" accept="image/*" style={{display:"none"}}
-                        onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(editingProduct.id,f); e.target.value="";}}/>
-                    </label>
-                  </div>
-                )}
-                <p style={{fontSize:10,color:"#999"}}>Tocá + para agregar más fotos al producto</p>
-              </div>
+{/* LISTA DE PRODUCTOS */}
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+  {filteredProdsPaged.map((p:any)=>(
+    <div key={p.id} style={{...card,display:"flex",gap:10,alignItems:"center"}}>
+      {p.image_url&&<img src={p.image_url} style={{width:48,height:48,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
+      <div style={{flex:1,minWidth:0}}>
+        <select value={p.category_id} onChange={e=>patchProduct(p.id,{category_id:Number(e.target.value)})}
+          style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2}}>
+          {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+        </select>
+        <p style={{fontWeight:600,fontSize:12,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
+        <div style={{display:"flex",gap:8,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</span>
+          <span style={{fontSize:11,color:"#3b82f6"}}>{fmt(Number(p.price_wholesale))}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:4}}>
+          <select value={p.stock_level} onChange={e=>patchProduct(p.id,{stock_level:e.target.value})}
+            style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:10,borderRadius:6,padding:"2px 6px"}}>
+            <option value="alto">🟢 Alto</option>
+            <option value="medio">🟡 Medio</option>
+            <option value="bajo">🔴 Bajo</option>
+          </select>
+          <span style={{fontSize:11,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
+          <input type="number" min="0" value={p.stock_quantity??0}
+            onChange={e=>setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,stock_quantity:Number(e.target.value)}:pp))}
+            onBlur={e=>{
+              const qty = Number(e.target.value);
+              patchProduct(p.id,{
+                stock_quantity: qty,
+                stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
+                available: qty > 0,
+              });
+            }} 
+            style={{width:52,padding:"2px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:11,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"center"}}>
+        <button className="toggle" style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
+          <div className="thumb" style={{left:p.available?18:3}}/>
+        </button>
+        <label style={{...btn("green"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",minWidth:32,minHeight:28}}>
+          <span>{uploadingId===p.id?"⏳":"📷"}</span>
+          <input type="file" accept="image/*" style={{display:"none"}}
+            onChange={async e=>{
+              const f=e.target.files?.[0];
+              if(!f) return;
+              setUploadingId(p.id);
+              const fd = new FormData();
+              fd.append("file", f);
+              try {
+                const res = await fetch("/api/upload",{method:"POST",credentials:"include",body:fd});
+                const json = await res.json();
+                if (json.url) {
+                  await fetch(`/api/products/${p.id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:json.url})});
+                  setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,image_url:json.url}:pp));
+                }
+              } catch(e){ alert("Error al subir"); }
+              setUploadingId(null);
+              e.target.value="";
+            }}/>
+        </label>
+        <button style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>✏️</button>
+        <button style={btn("red")} onClick={()=>deleteProduct(p.id)}>🗑️</button>
+      </div>
+    </div>
+  ))}
+  {hasMoreProds&&(
+    <button onClick={()=>setProdPage(p=>p+1)}
+      style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#00B4D8",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+      Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
+    </button>
+  )}
+</div>
+</div>
 
-              {/* CAMPOS */}
-              {([["Nombre","name","text"],["Descripción","description","text"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["Stock","stock_quantity","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
-                <div key={key}>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>{label.toUpperCase()}</label>
-                   <input type={type} style={inp} 
-  value={type==="number"&&(editingProduct[key]===0||editingProduct[key]==="0")?"":editingProduct[key]??""} 
-  placeholder={type==="number"?"0":""}
-  onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
+
+{/* BOTÓN SUBIR */}
+<button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+  style={{position:"fixed",bottom:20,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"rgba(0,180,216,.15)",border:"1px solid rgba(0,180,216,.4)",color:"#00B4D8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
+  ↑
+</button>
+
+{/* MODAL EDITAR */}
+{editingProduct&&(
+  <div className="mo" onClick={()=>setEditingProduct(null)}>
+    <div className="mb" onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,color:"#1a1a1a"}}>Editar producto</h3>
+        <button onClick={()=>setEditingProduct(null)} style={{background:"none",border:"none",color:"#666",fontSize:20,cursor:"pointer"}}>✕</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:11}}>
+
+        {/* FOTOS ADICIONALES */}
+        <div>
+          <label style={{fontSize:11,color:"#444",display:"block",marginBottom:8,fontWeight:600}}>FOTOS ADICIONALES</label>
+          {loadingImages ? (
+            <p style={{fontSize:12,color:"#666"}}>Cargando...</p>
+          ) : (
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
+              {extraImages.map((img:any)=>(
+                <div key={img.id} style={{position:"relative",width:70,height:70}}>
+                  <img src={img.image_url} style={{width:70,height:70,borderRadius:8,objectFit:"cover"}}/>
+                  <button onClick={()=>deleteExtraPhoto(editingProduct.id, img.id)}
+                    style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
+                    ✕
+                  </button>
                 </div>
               ))}
-
-              <div>
-                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
-                <select value={editingProduct.stock_level} onChange={e=>setEditingProduct((p:any)=>({...p,stock_level:e.target.value}))} style={{...inp,cursor:"pointer"}}>
-                  <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
-                </select>
-              </div>
-              <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-                {([["available","Disponible"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as [string,string][]).map(([key,label])=>(
-                  <label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",color:"#1a1a1a"}}>
-                    <input type="checkbox" checked={!!editingProduct[key]} onChange={e=>setEditingProduct((p:any)=>({...p,[key]:e.target.checked}))}/>{label}
-                  </label>
-                ))}
-              </div>
-              <div style={{display:"flex",gap:9,marginTop:4}}>
-                <button style={{...btn("cyan"),flex:1,padding:11}} onClick={saveEditProduct}>Guardar</button>
-                <button style={{...btn("default"),padding:"11px 14px"}} onClick={()=>setEditingProduct(null)}>Cancelar</button>
-              </div>
+              <label style={{width:70,height:70,borderRadius:8,border:"2px dashed #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:24,color:"#999"}}>
+                +
+                <input type="file" accept="image/*" style={{display:"none"}}
+                  onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(editingProduct.id,f); e.target.value="";}}/>
+              </label>
             </div>
-          </div>
+          )}
+          <p style={{fontSize:10,color:"#999"}}>Tocá + para agregar más fotos al producto</p>
         </div>
-      )}
 
-      {/* MODAL AGREGAR */}
-      {addingProduct&&(
-        <div className="mo" onClick={()=>setAddingProduct(false)}>
-          <div className="mb" onClick={e=>e.stopPropagation()}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-              <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,color:"#1a1a1a"}}>Agregar producto</h3>
-              <button onClick={()=>setAddingProduct(false)} style={{background:"none",border:"none",color:"#666",fontSize:20,cursor:"pointer"}}>✕</button>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:11}}>
-              <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NOMBRE *</label><input style={inp} value={newProduct.name} onChange={e=>setNewProduct(p=>({...p,name:e.target.value}))}/></div>
-              <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>DESCRIPCIÓN</label><input style={inp} value={newProduct.description} onChange={e=>setNewProduct(p=>({...p,description:e.target.value}))}/></div>
-              <div>
-                <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>CATEGORÍA *</label>
-                <select style={{...inp,cursor:"pointer"}} value={newProduct.category_id} onChange={e=>setNewProduct(p=>({...p,category_id:e.target.value}))}>
-                  <option value="">Seleccionar...</option>
-                  {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-                </select>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>MINORISTA *</label><input type="number" style={inp} value={newProduct.price_retail} onChange={e=>setNewProduct(p=>({...p,price_retail:e.target.value}))}/></div>
-                <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>MAYORISTA *</label><input type="number" style={inp} value={newProduct.price_wholesale} onChange={e=>setNewProduct(p=>({...p,price_wholesale:e.target.value}))}/></div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
-                  <input type="number" min="0" style={inp}value={newProduct.stock_quantity||""}
-placeholder="0" onChange={e=>setNewProduct(p=>({...p,stock_quantity:Number(e.target.value)}))}/>
-                </div>
-                <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
-                  <select style={{...inp,cursor:"pointer"}} value={newProduct.stock_level} onChange={e=>setNewProduct(p=>({...p,stock_level:e.target.value}))}>
-                    <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
-                  </select>
-                </div>
-              </div>
-              <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>URL IMAGEN</label><input style={inp} placeholder="https://..." value={newProduct.image_url} onChange={e=>setNewProduct(p=>({...p,image_url:e.target.value}))}/></div>
-              <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-                {([["available","Disponible"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as [string,string][]).map(([key,label])=>(
-                  <label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",color:"#1a1a1a"}}>
-                    <input type="checkbox" checked={!!(newProduct as any)[key]} onChange={e=>setNewProduct(p=>({...p,[key]:e.target.checked}))}/>{label}
-                  </label>
-                ))}
-              </div>
-              <div style={{display:"flex",gap:9,marginTop:4}}>
-                <button style={{...btn("green"),flex:1,padding:11}} onClick={saveNewProduct}>Guardar producto</button>
-                <button style={{...btn("default"),padding:"11px 14px"}} onClick={()=>setAddingProduct(false)}>Cancelar</button>
-              </div>
-            </div>
+        {/* CAMPOS */}
+        {([["Nombre","name","text"],["Descripción","description","text"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["Stock","stock_quantity","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
+          <div key={key}>
+            <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>{label.toUpperCase()}</label>
+            <input type={type} style={inp} 
+              value={type==="number"&&(editingProduct[key]===0||editingProduct[key]==="0")?"":editingProduct[key]??""} 
+              placeholder={type==="number"?"0":""}
+              onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
           </div>
+        ))}
+
+        <div>
+          <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
+          <select value={editingProduct.stock_level} onChange={e=>setEditingProduct((p:any)=>({...p,stock_level:e.target.value}))} style={{...inp,cursor:"pointer"}}>
+            <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
+          </select>
         </div>
-      )}
+        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+          {([["available","Disponible"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as [string,string][]).map(([key,label])=>(
+            <label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",color:"#1a1a1a"}}>
+              <input type="checkbox" checked={!!editingProduct[key]} onChange={e=>setEditingProduct((p:any)=>({...p,[key]:e.target.checked}))}/>{label}
+            </label>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:9,marginTop:4}}>
+          <button style={{...btn("cyan"),flex:1,padding:11}} onClick={saveEditProduct}>Guardar</button>
+          <button style={{...btn("default"),padding:"11px 14px"}} onClick={()=>setEditingProduct(null)}>Cancelar</button>
+        </div>
+      </div>
     </div>
-  );
+  </div>
+)}
+
+{/* MODAL AGREGAR */}
+{addingProduct&&(
+  <div className="mo" onClick={()=>setAddingProduct(false)}>
+    <div className="mb" onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,color:"#1a1a1a"}}>Agregar producto</h3>
+        <button onClick={()=>setAddingProduct(false)} style={{background:"none",border:"none",color:"#666",fontSize:20,cursor:"pointer"}}>✕</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:11}}>
+        <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NOMBRE *</label><input style={inp} value={newProduct.name} onChange={e=>setNewProduct(p=>({...p,name:e.target.value}))}/></div>
+        <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>DESCRIPCIÓN</label><input style={inp} value={newProduct.description} onChange={e=>setNewProduct(p=>({...p,description:e.target.value}))}/></div>
+        <div>
+          <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>CATEGORÍA *</label>
+          <select style={{...inp,cursor:"pointer"}} value={newProduct.category_id} onChange={e=>setNewProduct(p=>({...p,category_id:e.target.value}))}>
+            <option value="">Seleccionar...</option>
+            {categories.map((c:any)=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </select>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+          <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>MINORISTA *</label><input type="number" style={inp} value={newProduct.price_retail} onChange={e=>setNewProduct(p=>({...p,price_retail:e.target.value}))}/></div>
+          <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>MAYORISTA *</label><input type="number" style={inp} value={newProduct.price_wholesale} onChange={e=>setNewProduct(p=>({...p,price_wholesale:e.target.value}))}/></div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+          <div>
+            <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
+            <input type="number" min="0" style={inp} value={newProduct.stock_quantity||""}
+              placeholder="0" onChange={e=>setNewProduct(p=>({...p,stock_quantity:Number(e.target.value)}))}/>
+          </div>
+          <div>
+            <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
+            <select style={{...inp,cursor:"pointer"}} value={newProduct.stock_level} onChange={e=>setNewProduct(p=>({...p,stock_level:e.target.value}))}>
+              <option value="alto">🟢 Alto</option><option value="medio">🟡 Medio</option><option value="bajo">🔴 Bajo</option>
+            </select>
+          </div>
+        </div>
+        <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>URL IMAGEN</label><input style={inp} placeholder="https://..." value={newProduct.image_url} onChange={e=>setNewProduct(p=>({...p,image_url:e.target.value}))}/></div>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+          {([["available","Disponible"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as [string,string][]).map(([key,label])=>(
+            <label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",color:"#1a1a1a"}}>
+              <input type="checkbox" checked={!!(newProduct as any)[key]} onChange={e=>setNewProduct(p=>({...p,[key]:e.target.checked}))}/>{label}
+            </label>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:9,marginTop:4}}>
+          <button style={{...btn("green"),flex:1,padding:11}} onClick={saveNewProduct}>Guardar producto</button>
+          <button style={{...btn("default"),padding:"11px 14px"}} onClick={()=>setAddingProduct(false)}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+</div>
+);
 }
 
 export default function AdminPage() {
-  const [authed, setAuthed] = useState<boolean|null>(null);
+const [authed, setAuthed] = useState<boolean|null>(null);
 
-  useEffect(()=>{
-  const existing = document.querySelector("link[rel='manifest']");
-  if (existing) existing.remove();
-  return ()=>{
-    const link = document.createElement("link");
-    link.rel = "manifest";
-    link.href = "/manifest.json";
-    document.head.appendChild(link);
-  };
+useEffect(()=>{
+const existing = document.querySelector("link[rel='manifest']");
+if (existing) existing.remove();
+return ()=>{
+  const link = document.createElement("link");
+  link.rel = "manifest";
+  link.href = "/manifest.json";
+  document.head.appendChild(link);
+};
 },[]);
 
-  useEffect(()=>{
-    fetch("/api/auth/check",{credentials:"include"})
-      .then(r=>r.json())
-      .then(d=>setAuthed(!!d.ok))
-      .catch(()=>setAuthed(false));
-  },[]);
-
-
-  useEffect(()=>{
-  const existing = document.querySelector("link[rel='manifest']");
-  if (existing) existing.setAttribute("href", "/manifest-admin.json");
-  return ()=>{
-    if (existing) existing.setAttribute("href", "/manifest.json");
-  };
+useEffect(()=>{
+  fetch("/api/auth/check",{credentials:"include"})
+    .then(r=>r.json())
+    .then(d=>setAuthed(!!d.ok))
+    .catch(()=>setAuthed(false));
 },[]);
 
+useEffect(()=>{
+const existing = document.querySelector("link[rel='manifest']");
+if (existing) existing.setAttribute("href", "/manifest-admin.json");
+return ()=>{
+  if (existing) existing.setAttribute("href", "/manifest.json");
+};
+},[]);
 
-  const logout = async()=>{
-    await fetch("/api/auth/login",{method:"DELETE",credentials:"include"});
-    setAuthed(false);
-  };
+const logout = async()=>{
+  await fetch("/api/auth/login",{method:"DELETE",credentials:"include"});
+  setAuthed(false);
+};
 
-  if(authed===null) return <div style={{minHeight:"100vh",background:"#ffffff",display:"flex",alignItems:"center",justifyContent:"center",color:"#444",fontFamily:"sans-serif"}}>Cargando...</div>;
-  return authed ? <Panel onLogout={logout}/> : <Login onLogin={()=>setAuthed(true)}/>;
+if(authed===null) return <div style={{minHeight:"100vh",background:"#ffffff",display:"flex",alignItems:"center",justifyContent:"center",color:"#444",fontFamily:"sans-serif"}}>Cargando...</div>;
+return authed ? <Panel onLogout={logout}/> : <Login onLogin={()=>setAuthed(true)}/>;
 }
