@@ -192,17 +192,11 @@ const PRODS_PER_PAGE = 50;
     }).catch(()=>setLoading(false));
   };
 
-  const loadOrders = () => {
-    fetch("/api/orders",{credentials:"include"}).then(r=>r.ok?r.json():[]).then(o=>{
-      if(Array.isArray(o)) setOrders(o);
-    }).catch(()=>{});
-  };
+ 
 
   loadData();
-  const intervalOrders   = setInterval(loadOrders, 30000);
   const intervalProducts = setInterval(loadData, 1800000);
   return ()=>{
-    clearInterval(intervalOrders);
     clearInterval(intervalProducts);
   };
 },[]);
@@ -652,9 +646,14 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
        
         {/* PEDIDOS */}
         {tab==="orders"&&(
+          
           <div>
             <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,marginBottom:16,color:"#1a1a1a"}}>Pedidos</h2>
             <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              <button onClick={()=>fetch("/api/orders",{credentials:"include"}).then(r=>r.json()).then(o=>setOrders(o))}
+  style={{...btn("cyan"),marginBottom:12}}>
+  Actualizar pedidos
+</button>
               {orders.length===0&&<p style={{color:"#666",fontSize:14}}>No hay pedidos aún.</p>}
               {orders.map((order:any)=>(
                 <div key={order.id} style={card}>
@@ -693,6 +692,7 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
                               {STATUS[s].label}
                             </button>
                           ))}
+                          
                         </div>
                         <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
                           <button style={btn(order.paid?"amber":"green")} onClick={()=>patchOrder(order.id,{paid:!order.paid})}>

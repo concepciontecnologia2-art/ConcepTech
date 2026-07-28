@@ -7,24 +7,37 @@ export default function HomePage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
 
-  const loadData = () => {
-    Promise.all([
-      fetch("/api/products", { cache:"no-store" }).then(r=>r.json()),
-      fetch("/api/categories", { cache:"no-store" }).then(r=>r.json()),
-    ]).then(([p,c])=>{
-      setProducts(Array.isArray(p)?p:[]);
-      setCategories(Array.isArray(c)?c:[]);
-      setLoading(false);
-    }).catch(()=>setLoading(false));
-  };
+ const loadData = async () => {
+  try {
+    const [productsRes, categoriesRes] = await Promise.all([
+      fetch("/api/products", {
+        credentials: "include",
+        next: { revalidate: 300 } // caché de 5 minutos
+      }),
+      fetch("/api/categories", { 
+        cache: "no-store" 
+      }),
+    ]);
 
-  useEffect(()=>{
+    const p = await productsRes.json();
+    const c = await categoriesRes.json();
+
+    setProducts(Array.isArray(p) ? p : []);
+    setCategories(Array.isArray(c) ? c : []);
+  } catch (error) {
+    console.error("Error al cargar los datos:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  useEffect(() => {
   loadData();
-  const interval = setInterval(loadData, 1800000);
+  const interval = setInterval(loadData, 3600000); // 1 hora
   return () => {
     clearInterval(interval);
   };
-},[]);
+}, []);
 
   if (loading) return (
     <div style={{minHeight:"100vh",background:"#080c10",display:"flex",alignItems:"center",justifyContent:"center",color:"#445",fontFamily:"sans-serif",fontSize:14}}>
