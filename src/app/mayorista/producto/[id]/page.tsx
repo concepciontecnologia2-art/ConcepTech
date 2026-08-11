@@ -11,7 +11,18 @@ export default function ProductoMayoristaPage() {
   const [product, setProduct] = useState<any>(null);
   const [images, setImages] = useState<string[]>([]);
   const [currentImg, setCurrentImg] = useState(0);
-  const [cart, setCart] = useState<any[]>([]);
+const [cart, setCart] = useState<Item[]>(() => {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem("cart_mayorista");
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
+});
+
+useEffect(() => {
+  localStorage.setItem("cart_mayorista", JSON.stringify(cart));
+}, [cart]);
+
   const [loading, setLoading] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [qty, setQty] = useState(1);
@@ -267,24 +278,47 @@ export default function ProductoMayoristaPage() {
               <button onClick={() => setIsCartOpen(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#666" }}>✕</button>
             </div>
 
-            {cart.map(item => (
-              <div key={item.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 10, background: "#f0f7ff", borderRadius: 10, marginBottom: 8 }}>
-                <img src={item.image_url || GENERIC} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} alt={item.name} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</p>
-                  <p style={{ fontSize: 13, color: "#0077b6", fontWeight: 700 }}>{fmt(Number(item.price_wholesale) * item.qty)}</p>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <button onClick={() => updateQty(item.id, -1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #0077b6", background: "#fff", color: "#0077b6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>−</button>
-                  <span style={{ fontSize: 13, fontWeight: 600, minWidth: 16, textAlign: "center" }}>{item.qty}</span>
-                  <button onClick={() => updateQty(item.id, 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: "#0077b6", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>+</button>
-                  <button onClick={() => removeFromCart(item.id)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(239,68,68,.3)", background: "rgba(239,68,68,.08)", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🗑️</button>
-                </div>
-              </div>
-            ))}
+            {/* --- CARTEL DE AVISO DENTRO DEL CARRITO --- */}
+      <div style={{
+        background: "linear-gradient(135deg, #e0f2fe 0%, #bfdbfe 100%)",
+        border: "1px solid #93c5fd",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+        boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+      }}>
+        <span style={{ fontSize: 24, marginTop: -2 }}>💡</span>
+        <div>
+          <p style={{ fontSize: 13, color: "#1e40af", lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
+            ¿Venís del Bot de WhatsApp o tenés muchos productos?
+          </p>
+          <p style={{ fontSize: 13, color: "#1e40af", lineHeight: 1.5, margin: "6px 0 0 0", opacity: 0.9 }}>
+            Podés entrar y salir de la app sin problema: tu carrito quedará guardado y no se perderá ningún producto. ¡Gracias por seguir confiando en nosotros!
+          </p>
+        </div>
+      </div>
+
+           {cart.map(item => (
+  <div key={item.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 10, background: "#f0f7ff", borderRadius: 10, marginBottom: 8 }}>
+    <img src={item.image_url || GENERIC} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} alt={item.name} />
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <p style={{ fontSize: 12, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</p>
+      <p style={{ fontSize: 13, color: "#0077b6", fontWeight: 700 }}>{fmt(Number(item.price_wholesale) * item.qty)}</p>
+    </div>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <button onClick={() => updateQty(item.id, -1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #0077b6", background: "#fff", color: "#0077b6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>−</button>
+      <span style={{ fontSize: 13, fontWeight: 600, minWidth: 16, textAlign: "center", color: "#000000" }}>{item.qty}</span>
+      <button onClick={() => updateQty(item.id, 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: "#0077b6", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>+</button>
+      <button onClick={() => removeFromCart(item.id)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(239,68,68,.3)", background: "rgba(239,68,68,.08)", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🗑️</button>
+    </div>
+  </div>
+))}
 
             <div style={{ padding: "12px 0", borderTop: "1px solid #e5e7eb", margin: "12px 0", display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#666", fontSize: 14 }}>Total mayorista</span>
+              <span style={{ color: "#0e0d0d", fontSize: 14 }}>Total mayorista</span>
               <span style={{ fontSize: 20, fontWeight: 800, color: "#0077b6" }}>{fmt(cartTotal)}</span>
             </div>
 

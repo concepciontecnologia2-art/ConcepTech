@@ -20,6 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }).format(Number(product.price_wholesale));
 
   return {
+    
     title: `${product.name} (Mayorista) — Concepción Tecnología`,
     description: `Precio mayorista: ${price}. Concepción Tecnología, Venta al por mayor.`,
     openGraph: {
