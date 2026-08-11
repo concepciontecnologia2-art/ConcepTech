@@ -6,6 +6,15 @@ const fmt = (n: number) => new Intl.NumberFormat("es-AR", { style: "currency", c
 const WA = process.env.NEXT_PUBLIC_WHATSAPP!;
 const GENERIC = "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80";
 
+
+// Define la estructura que tiene cada producto en el carrito
+interface Item {
+  id: number | string;
+  name: string;
+  price_wholesale: number | string;
+  image_url?: string | null;
+  qty: number;
+}
 export default function ProductoMayoristaPage() {
   const { id } = useParams();
   const [product, setProduct] = useState<any>(null);
