@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   else sql += ` ORDER BY p.featured DESC, p.is_new DESC, p.name`;
 
   const res = NextResponse.json(await query(sql, params));
-  res.headers.set("Cache-Control", "no-store");
+  res.headers.set("Cache-Control", "no-store");  
   return res;
 }
 

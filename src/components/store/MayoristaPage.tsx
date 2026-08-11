@@ -554,6 +554,28 @@ ${lines}
               <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:19,fontWeight:700,color:"#1a1a1a"}}>Carrito Mayorista</h2>
               <button onClick={()=>setCartOpen(false)} style={{background:"none",border:"none",color:"#666",fontSize:22,cursor:"pointer"}}>✕</button>
             </div>
+            {/* CARTEL DE AVISO MEJORADO */}
+            <div style={{
+              background: "linear-gradient(135deg, #e0f2fe 0%, #bfdbfe 100%)",
+              border: "1px solid #93c5fd",
+              borderRadius: 12,
+              padding: 16,
+              marginBottom: 16,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 12,
+              boxShadow: "0 2px 4px rgba(0,0,0,0.05)"
+            }}>
+              <span style={{ fontSize: 24, marginTop: -2 }}>💡</span>
+              <div>
+                <p style={{ fontSize: 13, color: "#1e40af", lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
+                  ¿Venís del Bot de WhatsApp o tenés muchos productos?
+                </p>
+                <p style={{ fontSize: 13, color: "#1e40af", lineHeight: 1.5, margin: "6px 0 0 0", opacity: 0.9 }}>
+                  Podés entrar y salir de la app sin problema: tu carrito quedará guardado y no se perderá ningún producto. ¡Gracias por seguir confiando en nosotros!
+                </p>
+              </div>
+            </div>
             {cart.map(item=>(
               <div key={item.id} style={{display:"flex",gap:10,alignItems:"center",padding:10,background:"#f9fafb",borderRadius:10,border:"1px solid #e5e7eb",marginBottom:8}}>
                 <img src={item.image_url||GENERIC} style={{width:44,height:44,objectFit:"cover",borderRadius:7,flexShrink:0}} alt={item.name}/>
