@@ -310,7 +310,7 @@ useEffect(() => {
         </div>
       </div>
 
-           {cart.map(item => (
+          {cart.map(item => (
   <div key={item.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 10, background: "#f0f7ff", borderRadius: 10, marginBottom: 8 }}>
     <img src={item.image_url || GENERIC} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} alt={item.name} />
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -318,10 +318,10 @@ useEffect(() => {
       <p style={{ fontSize: 13, color: "#0077b6", fontWeight: 700 }}>{fmt(Number(item.price_wholesale) * item.qty)}</p>
     </div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <button onClick={() => updateQty(item.id, -1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #0077b6", background: "#fff", color: "#0077b6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>−</button>
+      <button onClick={() => updateQty(Number(item.id), -1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid #0077b6", background: "#fff", color: "#0077b6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>−</button>
       <span style={{ fontSize: 13, fontWeight: 600, minWidth: 16, textAlign: "center", color: "#000000" }}>{item.qty}</span>
-      <button onClick={() => updateQty(item.id, 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: "#0077b6", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>+</button>
-      <button onClick={() => removeFromCart(item.id)} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(239,68,68,.3)", background: "rgba(239,68,68,.08)", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🗑️</button>
+      <button onClick={() => updateQty(Number(item.id), 1)} style={{ width: 26, height: 26, borderRadius: "50%", border: "none", background: "#0077b6", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>+</button>
+      <button onClick={() => removeFromCart(Number(item.id))} style={{ width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(239,68,68,.3)", background: "rgba(239,68,68,.08)", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>🗑️</button>
     </div>
   </div>
 ))}
