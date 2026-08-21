@@ -107,7 +107,7 @@ useEffect(()=>{
     } catch(e){console.error(e);}
     const lines = cart.map(i=>`• ${i.qty}x ${i.name} — ${fmt(i.qty*Number(i.price_retail))}`).join("\n");
     const pagoMsg = payMethod==="transfer"
-      ? `💳 Alias: *${ALIAS}*\n\n⚠️ *Adjuntá el comprobante de transferencia para confirmar tu pedido.*`
+      ? `💳 Alias: Consultar!\n\n⚠️ *Adjuntá el comprobante de transferencia para confirmar tu pedido.*`
       : `💵 *Paga en efectivo al momento de la entrega.*`;
     const msg = encodeURIComponent(`🛒 *Concepción Tecnología*\n\n👤 ${form.name}\n📞 ${form.phone}\n📦 ${form.delivery==="pickup"?"Retira en local":`Envío a: ${form.address}`}\n💳 Pago: ${payMethod==="transfer"?"Transferencia":"Efectivo"}\n\n*Productos:*\n${lines}\n\n*Total: ${fmt(cartTotal)}*\n\n${pagoMsg}`);
     window.open(`https://wa.me/${WA}?text=${msg}`,"_blank");
