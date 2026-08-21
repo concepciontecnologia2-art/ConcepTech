@@ -178,7 +178,7 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
 const PRODS_PER_PAGE = 50;
 
 
- useEffect(()=>{
+  useEffect(()=>{
   const loadData = () => {
     Promise.all([
       fetch("/api/orders",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
@@ -192,7 +192,7 @@ const PRODS_PER_PAGE = 50;
     }).catch(()=>setLoading(false));
   };
 
- 
+  
 
   loadData();
   const intervalProducts = setInterval(loadData, 1800000);
@@ -308,18 +308,18 @@ const PRODS_PER_PAGE = 50;
  const exportExcel = () => {
   const XLSX = require("xlsx");
   const data = products.map((p:any)=>({
-    CODIGO:      "",
-    DETALLE:     p.name,
-    FAMILIA:     p.category_name||"",
-    PROVEEDOR:   "",
-    MARCA:       "",
-    "P.COSTO":   "",
-    "P.VENTA":   Number(p.price_wholesale),
-    IVA:         21,
-    "P.LISTA2":  Number(p.price_retail),
-    "P.LISTA3":  "",
-    "P.MAYOR":   Number(p.price_wholesale),
-    STOCK:       p.stock_quantity??0,
+    CODIGO:   "",
+    DETALLE:   p.name,
+    FAMILIA:   p.category_name||"",
+    PROVEEDOR: "",
+    MARCA:     "",
+    "P.COSTO": "",
+    "P.VENTA": Number(p.price_wholesale),
+    IVA:       21,
+    "P.LISTA2": Number(p.price_retail),
+    "P.LISTA3": "",
+    "P.MAYOR":  Number(p.price_wholesale),
+    STOCK:     p.stock_quantity??0,
     "STOCK MIN": "",
     "STOCK IDEAL": "",
   }));
@@ -338,14 +338,16 @@ const PRODS_PER_PAGE = 50;
 
   let updated = 0; let created = 0; let err = 0;
 
-  const limpiarNombre = (s:string) =>
-  s.toString().trim()
-   .replace(/^(Z{2,}|W{2,}|X{2,}|Y{2,})\s*/i, "")
-   .replace(/\s+/g, " ")
-   .trim()
-   .toUpperCase();
+  const limpiarNombre = (s:string) => {
+    const nombre = s.toString().trim().toUpperCase();
+    if (/^(ZZ|WW|XX|YY)/i.test(nombre)) return "IGNORE_PRODUCT";
+    return nombre.replace(/\s+/g, " ").trim();
+  };
   const prodMap = new Map<string, any>();
-  products.forEach((p:any) => prodMap.set(limpiarNombre(p.name), p));
+  products.forEach((p:any) => {
+    const n = limpiarNombre(p.name);
+    if (n !== "IGNORE_PRODUCT") prodMap.set(n, p);
+  });
 
   const familiaMap:Record<string,string> = {
     "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
@@ -399,6 +401,7 @@ const PRODS_PER_PAGE = 50;
 for (const row of rows) {
   const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
   const nombre = limpiarNombre(rawNombre);
+  if (nombre === "IGNORE_PRODUCT") continue;
   if (!nombre) continue;
 
   const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
@@ -431,6 +434,7 @@ for (const row of rows) {
 for (const row of rows) {
   const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
   const nombre = limpiarNombre(rawNombre);
+  if (nombre === "IGNORE_PRODUCT") continue;
   if (!nombre) continue;
 
   const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
@@ -451,10 +455,10 @@ for (const row of rows) {
       credentials:"include",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-        name:            nombre,
-        description:     "",
-        category_id:     cat.id,
-        price_retail:    precioMin,
+        name:           nombre,
+        description:    "",
+        category_id:    cat.id,
+        price_retail:   precioMin,
         price_wholesale: precioMay,
         stock_quantity:  stock,
         stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
@@ -483,7 +487,7 @@ for (const row of rows) {
     const lines = order.items?.map((i:any)=>`  • ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
     const txt =
 `══════════════════════════════════════
-     CONCEPCIÓN TECNOLOGÍA
+      CONCEPCIÓN TECNOLOGÍA
   Independencia 450, Concepción, Tucumán
   L-V 9-12 y 16-20hs
 ══════════════════════════════════════
@@ -511,7 +515,7 @@ ${lines}
     URL.revokeObjectURL(a.href);
   };
 
-  const totalPaid    = orders.filter(o=>o.paid).reduce((s,o)=>s+Number(o.total),0);
+  const totalPaid   = orders.filter(o=>o.paid).reduce((s,o)=>s+Number(o.total),0);
   const totalPending = orders.filter(o=>!o.paid&&o.status!=="cancelled").reduce((s,o)=>s+Number(o.total),0);
   const pendingCount = orders.filter(o=>o.status==="pending").length;
   const uniqueCats   = [...new Set(products.map((p:any)=>p.category_name))];
@@ -643,7 +647,7 @@ const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
             )}
           </div>
         )}
-       
+        
         {/* PEDIDOS */}
         {tab==="orders"&&(
           
