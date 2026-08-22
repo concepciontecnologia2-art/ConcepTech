@@ -325,7 +325,7 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     const limpiarNombre = (s:string) => s.toString().trim().toUpperCase().replace(/\s+/g, " ").trim();
     
     // FILTRO DE SEGURIDAD: Ignora productos que empiecen con Z, W, X, Y
-    const esProhibido = (n: string) => /^[WXY]+/i.test(n);
+    const esProhibido = (n: string) => /^[ZWXY]+/i.test(n);
 
     const prodMap = new Map<string, any>();
     products.forEach((p:any) => {
