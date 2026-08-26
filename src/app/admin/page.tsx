@@ -321,16 +321,22 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
 
     let updated = 0; let created = 0; let err = 0;
 
-    // Función de limpieza original
-    const limpiarNombre = (s:string) => s.toString().trim().toUpperCase().replace(/\s+/g, " ").trim();
-    
-    // FILTRO DE SEGURIDAD: Ignora productos que empiecen con Z, W, X, Y
-    const esProhibido = (n: string) => /^[ZWXY]+/i.test(n);
+    // LIMPIEZA: Saca los prefijos ZZ, WW, XX, YY del inicio para que coincidan con la base de datos
+    const limpiarNombre = (s:string) => {
+        return s.toString()
+            .trim()
+            .replace(/^(Z{2,}|W{2,}|X{2,}|Y{2,})\s*/i, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toUpperCase();
+    };
+
+    // FILTRO ESTRICTO: Si el Excel trae filas completamente bloqueadas que no querés registrar de ninguna forma
+    const esProhibidoCrudo = (s: string) => /^(Z{2,}|W{2,}|X{2,}|Y{2,})\s+/i.test(s.toString().trim());
 
     const prodMap = new Map<string, any>();
     products.forEach((p:any) => {
-        const n = limpiarNombre(p.name);
-        if (!esProhibido(n)) prodMap.set(n, p);
+        prodMap.set(limpiarNombre(p.name), p);
     });
 
     const familiaMap:Record<string,string> = {
@@ -385,15 +391,14 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     // PRIMERA PASADA — Actualizar existentes
     for (const row of rows) {
         const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+        if (!rawNombre.trim()) continue;
+
         const nombre = limpiarNombre(rawNombre);
-        
-        // El filtro de aduana aquí detiene cualquier proceso
-        if (!nombre || esProhibido(nombre)) continue;
+        if (!nombre) continue;
 
         const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
         const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
         const stock     = Number(row.STOCK ?? row.stock ?? 0);
-        const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
 
         const prod = prodMap.get(nombre);
         if (prod) {
@@ -415,20 +420,23 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
         }
     }
 
-    // SEGUNDA PASADA — Crear nuevos
+    // SEGUNDA PASADA — Crear nuevos (Aquí aplicamos el filtro estricto para que NUNCA cree productos prohibidos)
     for (const row of rows) {
         const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+        if (!rawNombre.trim()) continue;
+
+        // Si es un producto prohibido nuevo, lo filtramos para que NO se cree
+        if (esProhibidoCrudo(rawNombre)) continue;
+
         const nombre = limpiarNombre(rawNombre);
-        
-        // El filtro de aduana aquí detiene cualquier proceso
-        if (!nombre || esProhibido(nombre)) continue;
+        if (!nombre) continue;
 
         const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
         const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
         const stock     = Number(row.STOCK ?? row.stock ?? 0);
         const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
 
-        if (prodMap.has(nombre)) continue; 
+        if (prodMap.has(nombre)) continue; // Ya se actualizó en la primera pasada
 
         const cat = categories.find((c:any)=>c.name===inferirCategoria(nombre, familia)) || categories.find((c:any)=>c.name==="Varios");
         if (!cat) { err++; continue; }
@@ -466,7 +474,6 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     setImporting(false);
     alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
 };
-
   const downloadFact = (order:any) => {
     const lines = order.items?.map((i:any)=>`  • ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
     const txt =
