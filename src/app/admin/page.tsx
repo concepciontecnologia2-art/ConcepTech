@@ -321,7 +321,6 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
 
     let updated = 0; let created = 0; let err = 0;
 
-    // LIMPIEZA: Saca los prefijos ZZ, WW, XX, YY del inicio para que coincidan con la base de datos
     const limpiarNombre = (s:string) => {
         return s.toString()
             .trim()
@@ -331,7 +330,6 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
             .toUpperCase();
     };
 
-    // FILTRO ESTRICTO: Si el Excel trae filas completamente bloqueadas que no querés registrar de ninguna forma
     const esProhibidoCrudo = (s: string) => /^(Z{2,}|W{2,}|X{2,}|Y{2,})\s+/i.test(s.toString().trim());
 
     const prodMap = new Map<string, any>();
@@ -388,55 +386,57 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
         return "Varios";
     };
 
-    // PRIMERA PASADA — Actualizar existentes
+    // PRIMERA PASADA — Actualizar existentes con soporte ampliado de columnas
     for (const row of rows) {
-        const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+        const rawNombre = (row.DETALLE || row.NOMBRE || row.DESCRIPCION || "").toString();
         if (!rawNombre.trim()) continue;
 
         const nombre = limpiarNombre(rawNombre);
         if (!nombre) continue;
 
-        const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
-        const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+        const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || row.MINORISTA || row.P_LISTA2 || 0);
+        const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || row.MAYORISTA || row.P_VENTA || 0);
         const stock     = Number(row.STOCK ?? row.stock ?? 0);
 
         const prod = prodMap.get(nombre);
         if (prod) {
             try {
+                const payload: any = {
+                    stock_quantity:  stock,
+                    stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+                    available:       stock > 0,
+                };
+
+                if (precioMin > 0) payload.price_retail = precioMin;
+                if (precioMay > 0) payload.price_wholesale = precioMay;
+
                 await fetch(`/api/products/${prod.id}`,{
                     method:"PATCH",
                     credentials:"include",
                     headers:{"Content-Type":"application/json"},
-                    body:JSON.stringify({
-                        price_retail:    precioMin > 0 ? precioMin : prod.price_retail,
-                        price_wholesale: precioMay > 0 ? precioMay : prod.price_wholesale,
-                        stock_quantity:  stock,
-                        stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-                        available:       stock > 0,
-                    })
+                    body:JSON.stringify(payload)
                 });
                 updated++;
             } catch(e){ err++; }
         }
     }
 
-    // SEGUNDA PASADA — Crear nuevos (Aquí aplicamos el filtro estricto para que NUNCA cree productos prohibidos)
+    // SEGUNDA PASADA — Crear nuevos (bloqueando la creación de prohibidos)
     for (const row of rows) {
-        const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+        const rawNombre = (row.DETALLE || row.NOMBRE || row.DESCRIPCION || "").toString();
         if (!rawNombre.trim()) continue;
 
-        // Si es un producto prohibido nuevo, lo filtramos para que NO se cree
         if (esProhibidoCrudo(rawNombre)) continue;
 
         const nombre = limpiarNombre(rawNombre);
         if (!nombre) continue;
 
-        const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
-        const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+        const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || row.MINORISTA || row.P_LISTA2 || 0);
+        const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || row.MAYORISTA || row.P_VENTA || 0);
         const stock     = Number(row.STOCK ?? row.stock ?? 0);
         const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
 
-        if (prodMap.has(nombre)) continue; // Ya se actualizó en la primera pasada
+        if (prodMap.has(nombre)) continue; 
 
         const cat = categories.find((c:any)=>c.name===inferirCategoria(nombre, familia)) || categories.find((c:any)=>c.name==="Varios");
         if (!cat) { err++; continue; }
@@ -473,7 +473,7 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     setProducts(Array.isArray(updatedProds)?updatedProds:[]);
     setImporting(false);
     alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
-};
+  };
   const downloadFact = (order:any) => {
     const lines = order.items?.map((i:any)=>`  • ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
     const txt =
