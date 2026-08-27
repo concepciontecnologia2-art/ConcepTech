@@ -614,7 +614,7 @@ ${lines}
             <div style={{display:"flex",flexDirection:"column",gap:9}}>
               <button onClick={()=>fetch("/api/orders",{credentials:"include"}).then(r=>r.json()).then(o=>setOrders(o))}
                 style={{...btn("cyan"),marginBottom:12}}>
-                Actualizar pedidos
+                Actualizar pedidos...
               </button>
               {orders.length===0&&<p style={{color:"#666",fontSize:14}}>No hay pedidos aún.</p>}
               {orders.map((order:any)=>(
