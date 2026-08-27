@@ -386,7 +386,7 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
         return "Varios";
     };
 
-    // PRIMERA PASADA — Actualizar existentes leyendo las columnas reales de tu Excel
+    // PRIMERA PASADA — Actualizar existentes
     for (const row of rows) {
         const rawNombre = (row.DETALLE || row.NOMBRE || row.DESCRIPCION || "").toString();
         if (!rawNombre.trim()) continue;
@@ -394,10 +394,9 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
         const nombre = limpiarNombre(rawNombre);
         if (!nombre) continue;
 
-        // Leemos las columnas exactas de tu Excel
-        const precioVenta = Number(row["PRECIO VENTA"] || row["P.VENTA"] || row.PRECIO_MINORISTA || 0);
-        const precioCosto = Number(row["PRECIO COSTO"] || row["P.COSTO"] || 0);
-        const stock       = Number(row.STOCK ?? row.stock ?? 0);
+        const precioRetail = Number(row["PRECIO VENTA"] || row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+        const precioWholesale = Number(row["PRECIO COSTO"] || row["P.VENTA"] || row.PRECIO_MAYORISTA || 0);
+        const stock     = Number(row.STOCK ?? row.stock ?? 0);
 
         const prod = prodMap.get(nombre);
         if (prod) {
@@ -408,11 +407,8 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
                     available:       stock > 0,
                 };
 
-                // Actualizamos tanto el minorista como el mayorista con el valor de "PRECIO VENTA" (o costo si prefieres, pero usa precio venta)
-                if (precioVenta > 0) {
-                    payload.price_retail = precioVenta;
-                    payload.price_wholesale = precioVenta; 
-                }
+                if (precioRetail > 0) payload.price_retail = precioRetail;
+                if (precioWholesale > 0) payload.price_wholesale = precioWholesale;
 
                 await fetch(`/api/products/${prod.id}`,{
                     method:"PATCH",
@@ -425,7 +421,7 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
         }
     }
 
-    // SEGUNDA PASADA — Crear nuevos (bloqueando productos prohibidos y usando tus columnas reales)
+    // SEGUNDA PASADA — Crear nuevos
     for (const row of rows) {
         const rawNombre = (row.DETALLE || row.NOMBRE || row.DESCRIPCION || "").toString();
         if (!rawNombre.trim()) continue;
@@ -435,9 +431,10 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
         const nombre = limpiarNombre(rawNombre);
         if (!nombre) continue;
 
-        const precioVenta = Number(row["PRECIO VENTA"] || row["P.VENTA"] || row.PRECIO_MINORISTA || 0);
-        const stock       = Number(row.STOCK ?? row.stock ?? 0);
-        const familia     = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
+        const precioRetail = Number(row["PRECIO VENTA"] || row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+        const precioWholesale = Number(row["PRECIO COSTO"] || row["P.VENTA"] || row.PRECIO_MAYORISTA || 0);
+        const stock     = Number(row.STOCK ?? row.stock ?? 0);
+        const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
 
         if (prodMap.has(nombre)) continue; 
 
@@ -453,8 +450,8 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
                     name: nombre,
                     description: "",
                     category_id: cat.id,
-                    price_retail: precioVenta,
-                    price_wholesale: precioVenta,
+                    price_retail: precioRetail,
+                    price_wholesale: precioWholesale,
                     stock_quantity: stock,
                     stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
                     available: stock > 0,
