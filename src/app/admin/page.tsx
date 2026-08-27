@@ -320,9 +320,14 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   const rows = XLSX.utils.sheet_to_json(ws) as any[];
 
   const limpiarNombre = (s:string) => {
-  const nombre = s.toString().trim().toUpperCase();
+  const nombre = s.toString().trim().toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // quita acentos
+    .replace(/[^\w\s]/g, " ")        // quita caracteres especiales
+    .replace(/\s+/g, " ")
+    .trim();
   if (/^[XYZW]/i.test(nombre)) return "IGNORE_PRODUCT";
-  return nombre.replace(/\s+/g, " ").trim();
+  return nombre;
 };
 
   const familiaMap:Record<string,string> = {
@@ -363,12 +368,11 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     return "Varios";
   };
 
-  // Construir mapa de productos existentes
   const prodMap = new Map<string, any>();
-  products.forEach((p:any) => {
-    const n = limpiarNombre(p.name);
-    if (n !== "IGNORE_PRODUCT") prodMap.set(n, p);
-  });
+products.forEach((p:any) => {
+  const n = limpiarNombre(p.name);
+  if (n !== "IGNORE_PRODUCT") prodMap.set(n, p);
+});
 
   const updates: any[] = [];
   const creates: any[] = [];
