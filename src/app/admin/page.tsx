@@ -312,168 +312,137 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   };
 
  const importExcel = async(file:File)=>{
-    setImporting(true);
-    const XLSX = require("xlsx");
-    const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer);
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws) as any[];
+  setImporting(true);
+  const XLSX = require("xlsx");
+  const buffer = await file.arrayBuffer();
+  const wb = XLSX.read(buffer);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws) as any[];
 
-    let updated = 0; let created = 0; let err = 0;
+  const limpiarNombre = (s:string) => {
+  const nombre = s.toString().trim().toUpperCase();
+  if (/^[XYZW]/i.test(nombre)) return "IGNORE_PRODUCT";
+  return nombre.replace(/\s+/g, " ").trim();
+};
 
-    const limpiarNombre = (s:string) => {
-        return s.toString()
-            .trim()
-            .replace(/^(Z{2,}|W{2,}|X{2,}|Y{2,})\s*/i, "")
-            .replace(/\s+/g, " ")
-            .trim()
-            .toUpperCase();
-    };
-
-    const esProhibidoCrudo = (s: string) => /^(Z{2,}|W{2,}|X{2,}|Y{2,})\s+/i.test(s.toString().trim());
-
-    const prodMap = new Map<string, any>();
-    products.forEach((p:any) => {
-        prodMap.set(limpiarNombre(p.name), p);
-    });
-
-    const familiaMap:Record<string,string> = {
-        "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
-        "TPU FUNDAS Y VIDRIOS":"Celulares y Accesorios","CELULARES":"Celulares y Accesorios",
-        "CABLES":"Cargadores","CARGADORES":"Cargadores",
-        "COMPUTACION":"Computación y Gamer","JUEGOS":"Computación y Gamer","MEMORIA Y PENDRIVE":"Computación y Gamer",
-        "HOGAR":"Electro-Hogar","ELECTRICIDAD":"Electro-Hogar",
-        "LUCES":"Iluminación","PARLANTES":"Sonido",
-        "PERFUMES":"Perfumería","SAPHIRUS":"Perfumería","SAHUMERIOS":"Perfumería",
-        "MODULOS":"Repuestos","BATERIAS":"Repuestos","PLACA DE CARGA":"Repuestos",
-        "PIN DE CARGA":"Repuestos","TAPA TRASERA":"Repuestos",
-        "HERRAMIENTAS":"Varios","VARIOS":"Varios","BELLEZA":"Varios",
-        "CALCULADORAS":"Varios","RELOJES":"Varios","PILAS":"Varios",
-    };
-
-    const inferirCategoria = (nombre:string, familia:string) => {
-        if (familiaMap[familia]) return familiaMap[familia];
-        if (nombre.includes("MODULO")) return "Repuestos";
-        if (nombre.includes("BATERIA")) return "Repuestos";
-        if (nombre.includes("PLACA DE CARGA")) return "Repuestos";
-        if (nombre.includes("PIN DE CARGA")) return "Repuestos";
-        if (nombre.includes("TAPA TRASERA")) return "Repuestos";
-        if (nombre.includes("AURICULAR")) return "Celulares y Accesorios";
-        if (nombre.includes("FUNDA")) return "Celulares y Accesorios";
-        if (nombre.includes("VIDRIO")) return "Celulares y Accesorios";
-        if (nombre.includes("CABLE")) return "Cargadores";
-        if (nombre.includes("CARGADOR")) return "Cargadores";
-        if (nombre.includes("CABEZAL")) return "Cargadores";
-        if (nombre.includes("PARLANTE")) return "Sonido";
-        if (nombre.includes("MICROFONO")) return "Sonido";
-        if (nombre.includes("PERFUME")) return "Perfumería";
-        if (nombre.includes("SAPHIRUS")) return "Perfumería";
-        if (nombre.includes("SAHUMERIO")) return "Perfumería";
-        if (nombre.includes("LUZ")) return "Iluminación";
-        if (nombre.includes("FOCO")) return "Iluminación";
-        if (nombre.includes("LINTERNA")) return "Iluminación";
-        if (nombre.includes("LAMPARA")) return "Iluminación";
-        if (nombre.includes("MOUSE")) return "Computación y Gamer";
-        if (nombre.includes("TECLADO")) return "Computación y Gamer";
-        if (nombre.includes("JOYSTICK")) return "Computación y Gamer";
-        if (nombre.includes("CONSOLA")) return "Computación y Gamer";
-        if (nombre.includes("ANAFE")) return "Electro-Hogar";
-        if (nombre.includes("VENTILADOR")) return "Electro-Hogar";
-        if (nombre.includes("BALANZA")) return "Electro-Hogar";
-        if (nombre.includes("PILA")) return "Varios";
-        if (nombre.includes("RELOJ")) return "Varios";
-        if (nombre.includes("CANDADO")) return "Varios";
-        return "Varios";
-    };
-
-    // PRIMERA PASADA — Actualizar existentes con soporte ampliado de columnas
-    for (const row of rows) {
-        const rawNombre = (row.DETALLE || row.NOMBRE || row.DESCRIPCION || "").toString();
-        if (!rawNombre.trim()) continue;
-
-        const nombre = limpiarNombre(rawNombre);
-        if (!nombre) continue;
-
-        const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || row.MINORISTA || row.P_LISTA2 || 0);
-        const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || row.MAYORISTA || row.P_VENTA || 0);
-        const stock     = Number(row.STOCK ?? row.stock ?? 0);
-
-        const prod = prodMap.get(nombre);
-        if (prod) {
-            try {
-                const payload: any = {
-                    stock_quantity:  stock,
-                    stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-                    available:       stock > 0,
-                };
-
-                if (precioMin > 0) payload.price_retail = precioMin;
-                if (precioMay > 0) payload.price_wholesale = precioMay;
-
-                await fetch(`/api/products/${prod.id}`,{
-                    method:"PATCH",
-                    credentials:"include",
-                    headers:{"Content-Type":"application/json"},
-                    body:JSON.stringify(payload)
-                });
-                updated++;
-            } catch(e){ err++; }
-        }
-    }
-
-    // SEGUNDA PASADA — Crear nuevos (bloqueando la creación de prohibidos)
-    for (const row of rows) {
-        const rawNombre = (row.DETALLE || row.NOMBRE || row.DESCRIPCION || "").toString();
-        if (!rawNombre.trim()) continue;
-
-        if (esProhibidoCrudo(rawNombre)) continue;
-
-        const nombre = limpiarNombre(rawNombre);
-        if (!nombre) continue;
-
-        const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || row.MINORISTA || row.P_LISTA2 || 0);
-        const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || row.MAYORISTA || row.P_VENTA || 0);
-        const stock     = Number(row.STOCK ?? row.stock ?? 0);
-        const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
-
-        if (prodMap.has(nombre)) continue; 
-
-        const cat = categories.find((c:any)=>c.name===inferirCategoria(nombre, familia)) || categories.find((c:any)=>c.name==="Varios");
-        if (!cat) { err++; continue; }
-
-        try {
-            const res = await fetch("/api/products",{
-                method:"POST",
-                credentials:"include",
-                headers:{"Content-Type":"application/json"},
-                body:JSON.stringify({
-                    name: nombre,
-                    description: "",
-                    category_id: cat.id,
-                    price_retail: precioMin,
-                    price_wholesale: precioMay,
-                    stock_quantity: stock,
-                    stock_level: stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
-                    available: stock > 0,
-                    featured: false,
-                    is_offer: false,
-                    is_new: false,
-                    image_url: null,
-                })
-            });
-            if (res.ok) {
-                const newProd = await res.json();
-                prodMap.set(nombre, newProd);
-                created++;
-            } else { err++; }
-        } catch(e){ err++; }
-    } 
-
-    const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
-    setProducts(Array.isArray(updatedProds)?updatedProds:[]);
-    setImporting(false);
-    alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
+  const familiaMap:Record<string,string> = {
+    "AURICULARES":"Celulares y Accesorios","ACCESORIOS":"Celulares y Accesorios",
+    "TPU FUNDAS Y VIDRIOS":"Celulares y Accesorios","CELULARES":"Celulares y Accesorios",
+    "CABLES":"Cargadores","CARGADORES":"Cargadores",
+    "COMPUTACION":"Computación y Gamer","JUEGOS":"Computación y Gamer","MEMORIA Y PENDRIVE":"Computación y Gamer",
+    "HOGAR":"Electro-Hogar","ELECTRICIDAD":"Electro-Hogar",
+    "LUCES":"Iluminación","PARLANTES":"Sonido",
+    "PERFUMES":"Perfumería","SAPHIRUS":"Perfumería","SAHUMERIOS":"Perfumería",
+    "MODULOS":"Repuestos","BATERIAS":"Repuestos","PLACA DE CARGA":"Repuestos",
+    "PIN DE CARGA":"Repuestos","TAPA TRASERA":"Repuestos",
+    "HERRAMIENTAS":"Varios","VARIOS":"Varios","BELLEZA":"Varios",
+    "CALCULADORAS":"Varios","RELOJES":"Varios","PILAS":"Varios",
   };
+
+  const inferirCategoria = (nombre:string, familia:string) => {
+    if (familiaMap[familia]) return familiaMap[familia];
+    if (nombre.includes("MODULO")) return "Repuestos";
+    if (nombre.includes("BATERIA")) return "Repuestos";
+    if (nombre.includes("PLACA DE CARGA")) return "Repuestos";
+    if (nombre.includes("PIN DE CARGA")) return "Repuestos";
+    if (nombre.includes("TAPA TRASERA")) return "Repuestos";
+    if (nombre.includes("AURICULAR")) return "Celulares y Accesorios";
+    if (nombre.includes("FUNDA")) return "Celulares y Accesorios";
+    if (nombre.includes("VIDRIO")) return "Celulares y Accesorios";
+    if (nombre.includes("CABLE")) return "Cargadores";
+    if (nombre.includes("CARGADOR")) return "Cargadores";
+    if (nombre.includes("CABEZAL")) return "Cargadores";
+    if (nombre.includes("PARLANTE")) return "Sonido";
+    if (nombre.includes("PERFUME")) return "Perfumería";
+    if (nombre.includes("LINTERNA")) return "Iluminación";
+    if (nombre.includes("FOCO")) return "Iluminación";
+    if (nombre.includes("MOUSE")) return "Computación y Gamer";
+    if (nombre.includes("TECLADO")) return "Computación y Gamer";
+    if (nombre.includes("ANAFE")) return "Electro-Hogar";
+    if (nombre.includes("VENTILADOR")) return "Electro-Hogar";
+    return "Varios";
+  };
+
+  // Construir mapa de productos existentes
+  const prodMap = new Map<string, any>();
+  products.forEach((p:any) => {
+    const n = limpiarNombre(p.name);
+    if (n !== "IGNORE_PRODUCT") prodMap.set(n, p);
+  });
+
+  const updates: any[] = [];
+  const creates: any[] = [];
+
+  for (const row of rows) {
+    const rawNombre = (row.DETALLE || row.NOMBRE || "").toString();
+    const nombre = limpiarNombre(rawNombre);
+
+    // Ignorar productos con prefijos repetidos
+    if (!nombre || nombre === "IGNORE_PRODUCT") continue;
+
+    const precioMin = Number(row["P.LISTA2"] || row.PRECIO_MINORISTA || 0);
+    const precioMay = Number(row["P.VENTA"]  || row.PRECIO_MAYORISTA || 0);
+    const stock     = Number(row.STOCK ?? row.stock ?? 0);
+    const familia   = (row.FAMILIA || row.CATEGORIA || "").toString().trim().toUpperCase();
+
+    const prod = prodMap.get(nombre);
+
+    if (prod) {
+      updates.push({
+        id:              prod.id,
+        price_retail:    precioMin > 0 ? precioMin : prod.price_retail,
+        price_wholesale: precioMay > 0 ? precioMay : prod.price_wholesale,
+        stock_quantity:  stock,
+        stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+        available:       stock > 0,
+      });
+    } else {
+      const catName = inferirCategoria(nombre, familia);
+      const cat = categories.find((c:any)=>c.name===catName) || categories.find((c:any)=>c.name==="Varios");
+      if (!cat) continue;
+      creates.push({
+        name:            nombre,
+        category_id:     cat.id,
+        price_retail:    precioMin,
+        price_wholesale: precioMay,
+        stock_quantity:  stock,
+        stock_level:     stock > 10 ? "alto" : stock > 3 ? "medio" : "bajo",
+        available:       stock > 0,
+      });
+    }
+  }
+
+  // Enviar en lotes de 500
+  const LOTE = 500;
+  let updated = 0; let created = 0; let err = 0;
+
+  for (let i = 0; i < updates.length; i += LOTE) {
+    const lote = updates.slice(i, i + LOTE);
+    const res = await fetch("/api/products/batch", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ updates: lote, creates: [] })
+    });
+    if (res.ok) { const d = await res.json(); updated += d.updated; err += d.err; }
+    else err += lote.length;
+  }
+
+  for (let i = 0; i < creates.length; i += LOTE) {
+    const lote = creates.slice(i, i + LOTE);
+    const res = await fetch("/api/products/batch", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ updates: [], creates: lote })
+    });
+    if (res.ok) { const d = await res.json(); created += d.created; err += d.err; }
+    else err += lote.length;
+  }
+
+  const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
+  setProducts(Array.isArray(updatedProds)?updatedProds:[]);
+  setImporting(false);
+  alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
+};
   const downloadFact = (order:any) => {
     const lines = order.items?.map((i:any)=>`  • ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
     const txt =
