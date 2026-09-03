@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const fmt = (n:number) => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(n);
 const fmtDate = (s:string) => new Date(s).toLocaleDateString("es-AR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
@@ -177,26 +177,43 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
   const [prodPage, setProdPage] = useState(1);
   const PRODS_PER_PAGE = 50;
 
-  useEffect(()=>{
-    const loadData = () => {
-      Promise.all([
-        fetch("/api/orders",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
-        fetch("/api/products",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
-        fetch("/api/categories",{credentials:"include"}).then(r=>r.ok?r.json():Promise.resolve([])).catch(()=>[]),
-      ]).then(([o,p,c])=>{
-        if(Array.isArray(o)) setOrders(o);
-        if(Array.isArray(p)) setProducts(p);
-        if(Array.isArray(c)) setCategories(c);
-        setLoading(false);
-      }).catch(()=>setLoading(false));
-    };
+  // Carga inteligente bajo demanda (Lazy fetch por pestaña)
+  const fetchOrders = useCallback(async () => {
+    try {
+      const res = await fetch("/api/orders",{credentials:"include"});
+      if(res.ok) { const d = await res.json(); setOrders(Array.isArray(d)?d:[]); }
+    } catch {}
+  }, []);
 
-    loadData();
-    const intervalProducts = setInterval(loadData, 1800000);
-    return ()=>{
-      clearInterval(intervalProducts);
-    };
-  },[]);
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/products",{credentials:"include"});
+      if(res.ok) { const d = await res.json(); setProducts(Array.isArray(d)?d:[]); }
+    } catch {}
+  }, []);
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch("/api/categories",{credentials:"include"});
+      if(res.ok) { const d = await res.json(); setCategories(Array.isArray(d)?d:[]); }
+    } catch {}
+  }, []);
+
+  // Carga inicial optimizada (Solo trae lo indispensable primero)
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([fetchOrders(), fetchProducts()]).finally(() => {
+      if (isMounted) setLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, [fetchOrders, fetchProducts]);
+
+  // Carga bajo demanda al cambiar de pestaña
+  useEffect(() => {
+    if ((tab === "products" || addingProduct || editingProduct) && categories.length === 0) {
+      fetchCategories();
+    }
+  }, [tab, categories.length, fetchCategories, addingProduct, editingProduct]);
 
   const patchOrder = async(id:number,data:any)=>{
     await fetch(`/api/orders/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
@@ -438,8 +455,7 @@ function Panel({ onLogout }: { onLogout:()=>void }) {
     else err += lote.length;
   }
 
-  const updatedProds = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
-  setProducts(Array.isArray(updatedProds)?updatedProds:[]);
+  fetchProducts();
   setImporting(false);
   alert(`✅ ${updated} actualizados · ✨ ${created} creados${err>0?` · ❌ ${err} errores`:""}`);
 };
@@ -612,7 +628,7 @@ ${lines}
           <div>
             <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,marginBottom:16,color:"#1a1a1a"}}>Pedidos</h2>
             <div style={{display:"flex",flexDirection:"column",gap:9}}>
-              <button onClick={()=>fetch("/api/orders",{credentials:"include"}).then(r=>r.json()).then(o=>setOrders(o))}
+              <button onClick={fetchOrders}
                 style={{...btn("cyan"),marginBottom:12}}>
                 Actualizar pedidos...
               </button>
@@ -686,8 +702,7 @@ ${lines}
                   const newWholesale = Math.round(Number(p.price_wholesale) * (1+pct/100));
                   await fetch(`/api/products/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({price_retail:newRetail,price_wholesale:newWholesale})});
                 }
-                const updated = await fetch("/api/products",{credentials:"include"}).then(r=>r.json());
-                setProducts(Array.isArray(updated)?updated:[]);
+                await fetchProducts();
                 alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
               }}
             />

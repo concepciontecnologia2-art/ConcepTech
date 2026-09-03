@@ -14,7 +14,6 @@ const GENERIC = "https://images.unsplash.com/photo-1518770660439-4636190af475?w=
 
 export default function MayoristaPage({ initialProducts, categories }: { initialProducts: Prod[]; categories: Cat[] }) {
   const [showWelcome, setShowWelcome] = useState(true);
-   // O puedes usar localStorage para mostrarlo solo la primera vez
   const [registered, setRegistered] = useState(false);
   const [regForm, setRegForm] = useState({ name:"", phone:"" });
   const [regError, setRegError]   = useState("");
@@ -24,36 +23,35 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
   const [activeCat, setActiveCat] = useState<string|null>(null);
   const [sort, setSort]           = useState<"default"|"asc"|"desc">("default");
   const [cart, setCart] = useState<Item[]>(() => {
-  if (typeof window === "undefined") return [];
-  try {
-    const saved = localStorage.getItem("cart_mayorista");
-    return saved ? JSON.parse(saved) : [];
-  } catch { return []; }
-});
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("cart_mayorista");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
 
-useEffect(() => {
-  localStorage.setItem("cart_mayorista", JSON.stringify(cart));
-}, [cart]);
+  useEffect(() => {
+    localStorage.setItem("cart_mayorista", JSON.stringify(cart));
+  }, [cart]);
 
-const WelcomeModal = ({ onClose }: { onClose: () => void }) => (
-  <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-    <div style={{ background: "#ffffff", padding: "24px", borderRadius: 16, width: "90%", maxWidth: 360, textAlign: "center", boxShadow: "0 10px 25px rgba(0,0,0,0.2)" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
-      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>¡Nuevas funciones!</h2>
-      <p style={{ fontSize: 13, color: "#444", marginBottom: 20, lineHeight: 1.5 }}>
-        Ahora podés gestionar tus productos de forma más rápida:
-        <br/><br/>
-        ❤️ <b>Favoritos:</b> Guardá lo que más te gusta.
-        <br/>
-        Mis <b>Pedidos:</b> Seguí tus pedidos anteriores.
-      </p>
-      <button onClick={onClose} style={{ width: "100%", padding: "12px", borderRadius: 8, background: "#0077b6", color: "#fff", border: "none", fontWeight: 700, cursor: "pointer" }}>
-        ¡Entendido!
-      </button>
+  const WelcomeModal = ({ onClose }: { onClose: () => void }) => (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+      <div style={{ background: "#ffffff", padding: "24px", borderRadius: 16, width: "90%", maxWidth: 360, textAlign: "center", boxShadow: "0 10px 25px rgba(0,0,0,0.2)" }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
+        <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>¡Nuevas funciones!</h2>
+        <p style={{ fontSize: 13, color: "#444", marginBottom: 20, lineHeight: 1.5 }}>
+          Ahora podés gestionar tus productos de forma más rápida:
+          <br/><br/>
+          ❤️ <b>Favoritos:</b> Guardá lo que más te gusta.
+          <br/>
+          Mis <b>Pedidos:</b> Seguí tus pedidos anteriores.
+        </p>
+        <button onClick={onClose} style={{ width: "100%", padding: "12px", borderRadius: 8, background: "#0077b6", color: "#fff", border: "none", fontWeight: 700, cursor: "pointer" }}>
+          ¡Entendido!
+        </button>
+      </div>
     </div>
-  </div>
-);
-
+  );
 
   const [cartOpen, setCartOpen]   = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -65,15 +63,17 @@ const WelcomeModal = ({ onClose }: { onClose: () => void }) => (
   const [showHistorial, setShowHistorial] = useState(false);
   const [historial, setHistorial] = useState<any[]>([]);
   const [favProds, setFavProds] = useState<any[]>([]);
-  
 
   // FUNCIONES FAVORITOS E HISTORIAL
   const loadFavs = async (phone: string) => {
+    if (!phone) return;
     try {
-      const res = await fetch(`/api/favoritos?phone=${phone}`);
-      const data = await res.json();
-      setFavProds(data);
-      setFavIds(data.map((p:any) => p.id));
+      const res = await fetch(`/api/favoritos?phone=${encodeURIComponent(phone)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFavProds(Array.isArray(data)?data:[]);
+        setFavIds(Array.isArray(data)?data.map((p:any) => p.id):[]);
+      }
     } catch(e) {}
   };
 
@@ -92,10 +92,13 @@ const WelcomeModal = ({ onClose }: { onClose: () => void }) => (
   };
 
   const loadHistorial = async () => {
+    if (!regForm.phone) return;
     try {
-      const res = await fetch(`/api/historial?phone=${regForm.phone}`);
-      const data = await res.json();
-      setHistorial(data);
+      const res = await fetch(`/api/historial?phone=${encodeURIComponent(regForm.phone)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistorial(Array.isArray(data)?data:[]);
+      }
     } catch(e) {}
   };
 
@@ -103,7 +106,7 @@ const WelcomeModal = ({ onClose }: { onClose: () => void }) => (
   useEffect(()=>{
     const name = localStorage.getItem("mayorista_name") || "";
     const phone = localStorage.getItem("mayorista_phone") || "";
-    if (name) {
+    if (name && phone) {
       setRegistered(true);
       setRegForm({ name, phone });
       setForm(f=>({...f, name, phone }));
@@ -211,185 +214,192 @@ ${lines}
     URL.revokeObjectURL(a.href);
   };
 
+  // Carrusel optimizado: Lazy-loading de imágenes al presionar controles
   const ProductImageCarousel = ({ productId, mainImage }: { productId:number; mainImage:string|null }) => {
     const [imgIdx, setImgIdx] = useState(0);
     const [imgs, setImgs] = useState<string[]>([mainImage||GENERIC]);
-    useEffect(()=>{
-      fetch(`/api/products/${productId}/images`)
-        .then(r=>r.json())
-        .then((extra:any[])=>{
+    const [hasLoadedExtra, setHasLoadedExtra] = useState(false);
+
+    const loadExtraImagesOnDemand = async () => {
+      if (hasLoadedExtra) return;
+      try {
+        const res = await fetch(`/api/products/${productId}/images`);
+        if (res.ok) {
+          const extra = await res.json();
           const all = [mainImage, ...extra.map((i:any)=>i.image_url)].filter(Boolean) as string[];
           setImgs(all.length>0?all:[GENERIC]);
-        }).catch(()=>{});
-    },[productId]);
+        }
+      } catch {}
+      setHasLoadedExtra(true);
+    };
+
     return (
       <div className="prod-img-box">
         <img src={imgs[imgIdx]} alt="" loading="lazy"/>
-        {imgs.length>1&&(
-          <>
-            <button className="img-nav img-nav-left" onClick={e=>{e.stopPropagation();setImgIdx(i=>i===0?imgs.length-1:i-1);}}>‹</button>
-            <button className="img-nav img-nav-right" onClick={e=>{e.stopPropagation();setImgIdx(i=>i===imgs.length-1?0:i+1);}}>›</button>
-            <div className="img-dots">
-              {imgs.map((_,i)=>(
-                <div key={i} onClick={e=>{e.stopPropagation();setImgIdx(i);}}
-                  className={`img-dot ${i===imgIdx?"active":""}`}/>
-              ))}
-            </div>
-          </>
-        )}
+        <button className="img-nav img-nav-left" onClick={async e=>{
+          e.stopPropagation();
+          await loadExtraImagesOnDemand();
+          setImgIdx(i=>i===0?imgs.length-1:i-1);
+        }}>‹</button>
+        <button className="img-nav img-nav-right" onClick={async e=>{
+          e.stopPropagation();
+          await loadExtraImagesOnDemand();
+          setImgIdx(i=>i===imgs.length-1?0:i+1);
+        }}>›</button>
       </div>
     );
   };
+
   const MayoristaCategorySection = ({ catName, prods }: { catName: string; prods: any[] }) => {
-  const hash = typeof window !== "undefined" ? window.location.hash : "";
-  const hayHashEnEstaCat = prods.some(p => `#producto-${p.id}` === hash);
-  const [visibleCount, setVisibleCount] = useState(hayHashEnEstaCat ? prods.length : 12);
-  const visible = prods.slice(0, visibleCount);
-  const hasMore = visibleCount < prods.length;
-  const hasLess = visibleCount > 12;
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    const hayHashEnEstaCat = prods.some(p => `#producto-${p.id}` === hash);
+    const [visibleCount, setVisibleCount] = useState(hayHashEnEstaCat ? prods.length : 12);
+    const visible = prods.slice(0, visibleCount);
+    const hasMore = visibleCount < prods.length;
+    const hasLess = visibleCount > 12;
 
-  return (
-    <section className="cat-section">
-      {catName && (
-        <div className="cat-section-head">
-          <h2 className="cat-section-title">
-            {categories.find((c: any) => c.name === catName)?.icon} {catName}
-          </h2>
-          <button className="btn-outline-sm" onClick={() => downloadCatalogoPDF(catName, prods)}>
-            Descargar catálogo
-          </button>
-        </div>
-      )}
+    return (
+      <section className="cat-section">
+        {catName && (
+          <div className="cat-section-head">
+            <h2 className="cat-section-title">
+              {categories.find((c: any) => c.name === catName)?.icon} {catName}
+            </h2>
+            <button className="btn-outline-sm" onClick={() => downloadCatalogoPDF(catName, prods)}>
+              Descargar catálogo
+            </button>
+          </div>
+        )}
 
-      {/* GRILLA DE PRODUCTOS RESPONSIVE */}
-      <div className="products-grid">
-        {visible.map(p => {
-          const inCart = cart.find((i: any) => i.id === p.id);
-          const esFav = favIds.includes(p.id);
+        {/* GRILLA DE PRODUCTOS RESPONSIVE */}
+        <div className="products-grid">
+          {visible.map(p => {
+            const inCart = cart.find((i: any) => i.id === p.id);
+            const esFav = favIds.includes(p.id);
 
-          return (
-            <div
-              key={p.id}
-              id={`producto-${p.id}`}
-              className={`product-card ${inCart ? "in-cart" : ""}`}
-              onClick={() => window.location.href = `/mayorista/producto/${p.id}`}
-            >
-              {/* BOTÓN FAVORITO */}
-              <button
-                className="fav-btn"
-                onClick={e => { e.stopPropagation(); toggleFav(p.id); }}
+            return (
+              <div
+                key={p.id}
+                id={`producto-${p.id}`}
+                className={`product-card ${inCart ? "in-cart" : ""}`}
+                onClick={() => window.location.href = `/mayorista/producto/${p.id}`}
               >
-                {esFav ? "❤️" : "🤍"}
-              </button>
+                {/* BOTÓN FAVORITO */}
+                <button
+                  className="fav-btn"
+                  onClick={e => { e.stopPropagation(); toggleFav(p.id); }}
+                >
+                  {esFav ? "❤️" : "🤍"}
+                </button>
 
-              {/* IMAGEN Y ETIQUETAS */}
-              <div className="prod-media">
-                <ProductImageCarousel productId={p.id} mainImage={p.image_url} />
+                {/* IMAGEN Y ETIQUETAS */}
+                <div className="prod-media">
+                  <ProductImageCarousel productId={p.id} mainImage={p.image_url} />
 
-                <div className="prod-badges">
-                  {p.is_offer && <span className="badge badge-offer">OFERTA</span>}
-                  {p.is_new && <span className="badge badge-new">NUEVO</span>}
+                  <div className="prod-badges">
+                    {p.is_offer && <span className="badge badge-offer">OFERTA</span>}
+                    {p.is_new && <span className="badge badge-new">NUEVO</span>}
+                  </div>
+
+                  {inCart && (
+                    <div className="prod-qty-pill">×{inCart.qty}</div>
+                  )}
                 </div>
 
-                {inCart && (
-                  <div className="prod-qty-pill">×{inCart.qty}</div>
-                )}
-              </div>
+                {/* CONTENIDO */}
+                <div className="prod-body">
+                  <p className="prod-name">{p.name}</p>
 
-              {/* CONTENIDO */}
-              <div className="prod-body">
-                <p className="prod-name">{p.name}</p>
+                  {p.description && (
+                    <p className="prod-desc">{p.description}</p>
+                  )}
 
-                {p.description && (
-                  <p className="prod-desc">{p.description}</p>
-                )}
+                  {/* PRECIOS */}
+                  <div className="prod-prices" onClick={e => e.stopPropagation()}>
+                    <div>
+                      <p className="prod-price-wholesale">{fmt(Number(p.price_wholesale))}</p>
+                      <p className="prod-price-retail">{fmt(Number(p.price_retail))}</p>
+                    </div>
+                  </div>
 
-                {/* PRECIOS */}
-                <div className="prod-prices" onClick={e => e.stopPropagation()}>
-                  <div>
-                    <p className="prod-price-wholesale">{fmt(Number(p.price_wholesale))}</p>
-                    <p className="prod-price-retail">{fmt(Number(p.price_retail))}</p>
+                  {/* STOCK */}
+                  <p className={`prod-stock ${Number(p.stock_quantity) === 0 ? "stock-none" : Number(p.stock_quantity) <= 3 ? "stock-none" : Number(p.stock_quantity) <= 10 ? "stock-low" : "stock-ok"}`}>
+                    {Number(p.stock_quantity) === 0 ? "🔴 Sin stock" : Number(p.stock_quantity) <= 3 ? `🔴 ${p.stock_quantity} u.` : Number(p.stock_quantity) <= 10 ? `🟡 ${p.stock_quantity} u.` : `🟢 ${p.stock_quantity} u.`}
+                  </p>
+
+                  {/* CONTROLES DE CANTIDAD */}
+                  <div className="qty-controls" onClick={e => e.stopPropagation()}>
+                    <button className="qty-btn" onClick={() => updateQty(p.id, -1)}>−</button>
+
+                    <input
+                      type="number"
+                      min="0"
+                      className="qty-input"
+                      value={inCart?.qty || 0}
+                      onChange={e => {
+                        const qty = Math.max(0, Number(e.target.value));
+                        setCart(prev => {
+                          const ex = prev.find(i => i.id === p.id);
+                          return ex ? prev.map(i => i.id === p.id ? { ...i, qty } : i).filter(i => i.qty > 0) : qty > 0 ? [...prev, { ...p, qty }] : prev;
+                        });
+                      }}
+                    />
+
+                    <button className="qty-btn" onClick={() => addToCart(p)} disabled={Number(p.stock_quantity) === 0}>+</button>
+                  </div>
+
+                  {/* BOTONES DE COMPARTIR */}
+                  <div className="share-row" onClick={e => e.stopPropagation()}>
+                    {[
+                      ["wa", <svg key="wa" width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>],
+                      ["fb", <svg key="fb" width="14" height="14" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>],
+                      ["ig", <svg key="ig" width="14" height="14" viewBox="0 0 24 24" fill="url(#igm)"><defs><linearGradient id="igm" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="50%" stopColor="#dc2743"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>],
+                    ].map(([via, icon]) => (
+                      <button
+                        key={via as string}
+                        className="share-btn"
+                        onClick={() => {
+                          const url = `${window.location.origin}/mayorista/producto/${p.id}`;
+                          const text = `🛒 ${p.name} — ${fmt(Number(p.price_wholesale))} | Concepción Tecnología`;
+                          if (via === "wa") window.open(`https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`, "_blank");
+                          if (via === "fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
+                          if (via === "ig") navigator.clipboard.writeText(text + "\n" + url).then(() => alert("✅ Link copiado!"));
+                        }}
+                      >
+                        {icon}
+                      </button>
+                    ))}
                   </div>
                 </div>
-
-                {/* STOCK */}
-                <p className={`prod-stock ${Number(p.stock_quantity) === 0 ? "stock-none" : Number(p.stock_quantity) <= 3 ? "stock-none" : Number(p.stock_quantity) <= 10 ? "stock-low" : "stock-ok"}`}>
-                  {Number(p.stock_quantity) === 0 ? "🔴 Sin stock" : Number(p.stock_quantity) <= 3 ? `🔴 ${p.stock_quantity} u.` : Number(p.stock_quantity) <= 10 ? `🟡 ${p.stock_quantity} u.` : `🟢 ${p.stock_quantity} u.`}
-                </p>
-
-                {/* CONTROLES DE CANTIDAD */}
-                <div className="qty-controls" onClick={e => e.stopPropagation()}>
-                  <button className="qty-btn" onClick={() => updateQty(p.id, -1)}>−</button>
-
-                  <input
-                    type="number"
-                    min="0"
-                    className="qty-input"
-                    value={inCart?.qty || 0}
-                    onChange={e => {
-                      const qty = Math.max(0, Number(e.target.value));
-                      setCart(prev => {
-                        const ex = prev.find(i => i.id === p.id);
-                        return ex ? prev.map(i => i.id === p.id ? { ...i, qty } : i).filter(i => i.qty > 0) : qty > 0 ? [...prev, { ...p, qty }] : prev;
-                      });
-                    }}
-                  />
-
-                  <button className="qty-btn" onClick={() => addToCart(p)} disabled={Number(p.stock_quantity) === 0}>+</button>
-                </div>
-
-                {/* BOTONES DE COMPARTIR */}
-                <div className="share-row" onClick={e => e.stopPropagation()}>
-                  {[
-                    ["wa", <svg key="wa" width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>],
-                    ["fb", <svg key="fb" width="14" height="14" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>],
-                    ["ig", <svg key="ig" width="14" height="14" viewBox="0 0 24 24" fill="url(#igm)"><defs><linearGradient id="igm" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="50%" stopColor="#dc2743"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>],
-                  ].map(([via, icon]) => (
-                    <button
-                      key={via as string}
-                      className="share-btn"
-                      onClick={() => {
-                        const url = `${window.location.origin}/mayorista/producto/${p.id}`;
-                        const text = `🛒 ${p.name} — ${fmt(Number(p.price_wholesale))} | Concepción Tecnología`;
-                        if (via === "wa") window.open(`https://wa.me/?text=${encodeURIComponent(text + "\n" + url)}`, "_blank");
-                        if (via === "fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
-                        if (via === "ig") navigator.clipboard.writeText(text + "\n" + url).then(() => alert("✅ Link copiado!"));
-                      }}
-                    >
-                      {icon}
-                    </button>
-                  ))}
-                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* BOTONES DE VER MÁS / VER MENOS */}
-      {(hasMore || hasLess) && (
-        <div className="loadmore-row">
-          {hasMore && (
-            <button
-              className="btn-loadmore"
-              onClick={() => setVisibleCount(v => Math.min(v + 12, prods.length))}
-            >
-              Ver más
-            </button>
-          )}
-          {hasLess && (
-            <button
-              className="btn-loadless"
-              onClick={() => setVisibleCount(12)}
-            >
-              Ver menos
-            </button>
-          )}
+            );
+          })}
         </div>
-      )}
-    </section>
-  );
-};
+
+        {/* BOTONES DE VER MÁS / VER MENOS */}
+        {(hasMore || hasLess) && (
+          <div className="loadmore-row">
+            {hasMore && (
+              <button
+                className="btn-loadmore"
+                onClick={() => setVisibleCount(v => Math.min(v + 12, prods.length))}
+              >
+                Ver más
+              </button>
+            )}
+            {hasLess && (
+              <button
+                className="btn-loadless"
+                onClick={() => setVisibleCount(12)}
+              >
+                Ver menos
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+    );
+  };
 
   if (!registered) return (
     <div className="auth-screen">
@@ -425,288 +435,288 @@ ${lines}
     </div>
   );
 
- return (
-  <div className="app-root">
-    <style dangerouslySetInnerHTML={{__html:GLOBAL_CSS}}/>
+  return (
+    <div className="app-root">
+      <style dangerouslySetInnerHTML={{__html:GLOBAL_CSS}}/>
 
-    {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
+      {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
 
-    {/* HEADER */}
-    <header className="app-header">
-      <div className="header-inner">
-        <div className="header-top">
-          <h1 className="header-title">
-            <span className="accent-cyan">Concepción</span> Tecnologia <span className="header-tag">MAYORISTA</span>
-          </h1>
-          {cartCount > 0 && (
-            <button onClick={() => setCartOpen(true)} className="header-cart-btn">
-              🛒 {cartCount}
-            </button>
-          )}
-        </div>
-        <p className="header-sub">{regForm.name} · <span className="header-min">Mínima $80.000</span></p>
-        <div className="header-actions">
-          <button onClick={() => setShowFavs(true)} className="chip-btn">❤️ Favoritos</button>
-          <button onClick={() => { setShowHistorial(true); loadHistorial(); }} className="chip-btn">Mis Pedidos</button>
-          <a href="/" className="chip-btn chip-link">Minorista</a>
-        </div>
-      </div>
-    </header>
-
-    <main className="app-main">
-      {/* Buscador y Ordenador */}
-      <div className="search-row">
-        <input className="if3 search-input" placeholder="Buscar precio mayorista" value={search} onChange={e => setSearch(e.target.value)} />
-        <select
-          className="if3 sort-select"
-          value={sort}
-          onChange={(e) => setSort(e.target.value as "default" | "asc" | "desc")}
-        >
-          <option value="default">Ordenar</option>
-          <option value="desc">Más caro</option>
-          <option value="asc">Más barato</option>
-        </select>
-      </div>
-
-      {/* Categorías */}
-      <div className="cat-scroll">
-        <button className={`pb2 ${!activeCat ? "active" : ""}`} onClick={() => setActiveCat(null)}>Todos</button>
-        {categories.map(c => (
-          <button key={c.id} className={`pb2 ${activeCat === c.slug ? "active" : ""}`} onClick={() => setActiveCat(activeCat === c.slug ? null : c.slug)}>{c.icon} {c.name}</button>
-        ))}
-      </div>
-
-      {/* Listado de Productos */}
-      {Object.entries(grouped).map(([catName, prods]) => (
-        <MayoristaCategorySection key={catName} catName={catName} prods={prods} />
-      ))}
-    </main>
-
-    {/* CARRITO FLOTANTE */}
-    {cartCount>0&&!cartOpen&&(
-      <button onClick={()=>setCartOpen(true)} className="fab-cart">
-        {"🛒 Carrito "}
-        <span className="fab-cart-count">{cartCount}</span>
-      </button>
-    )}
-
-    {/* DRAWER CARRITO */}
-    {cartOpen&&(
-      <div className="drawer">
-        <div className="overlay" onClick={()=>setCartOpen(false)}/>
-        <div className="drawer-panel">
-          <div className="drawer-head">
-            <h2 className="drawer-title">Carrito Mayorista</h2>
-            <button onClick={()=>setCartOpen(false)} className="icon-close">✕</button>
+      {/* HEADER */}
+      <header className="app-header">
+        <div className="header-inner">
+          <div className="header-top">
+            <h1 className="header-title">
+              <span className="accent-cyan">Concepción</span> Tecnologia <span className="header-tag">MAYORISTA</span>
+            </h1>
+            {cartCount > 0 && (
+              <button onClick={() => setCartOpen(true)} className="header-cart-btn">
+                🛒 {cartCount}
+              </button>
+            )}
           </div>
-          {/* CARTEL DE AVISO */}
-          <div className="notice-box">
-            <span className="notice-icon">💡</span>
-            <div>
-              <p className="notice-strong">¿Venís del Bot de WhatsApp o tenés muchos productos?</p>
-              <p className="notice-soft">Podés entrar y salir de la app sin problema: tu carrito quedará guardado y no se perderá ningún producto. ¡Gracias por seguir confiando en nosotros!</p>
-            </div>
+          <p className="header-sub">{regForm.name} · <span className="header-min">Mínima $80.000</span></p>
+          <div className="header-actions">
+            <button onClick={() => setShowFavs(true)} className="chip-btn">❤️ Favoritos</button>
+            <button onClick={() => { setShowHistorial(true); loadHistorial(); }} className="chip-btn">Mis Pedidos</button>
+            <a href="/" className="chip-btn chip-link">Minorista</a>
           </div>
-          {cart.map(item=>(
-            <div key={item.id} className="cart-line">
-              <img src={item.image_url||GENERIC} className="cart-line-img" alt={item.name}/>
-              <div className="cart-line-info">
-                <p className="cart-line-name">{item.name}</p>
-                <p className="cart-line-price">{fmt(Number(item.price_wholesale)*item.qty)}</p>
-              </div>
-              <div className="cart-line-controls">
-                <button onClick={()=>updateQty(item.id,-1)} className="qty-btn">−</button>
-                <span className="cart-line-qty">{item.qty}</span>
-                <button onClick={()=>updateQty(item.id,1)} className="qty-btn">+</button>
-                <button onClick={()=>removeFromCart(item.id)} className="qty-btn qty-btn-danger">🗑️</button>
-              </div>
-            </div>
+        </div>
+      </header>
+
+      <main className="app-main">
+        {/* Buscador y Ordenador */}
+        <div className="search-row">
+          <input className="if3 search-input" placeholder="Buscar precio mayorista" value={search} onChange={e => setSearch(e.target.value)} />
+          <select
+            className="if3 sort-select"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as "default" | "asc" | "desc")}
+          >
+            <option value="default">Ordenar</option>
+            <option value="desc">Más caro</option>
+            <option value="asc">Más barato</option>
+          </select>
+        </div>
+
+        {/* Categorías */}
+        <div className="cat-scroll">
+          <button className={`pb2 ${!activeCat ? "active" : ""}`} onClick={() => setActiveCat(null)}>Todos</button>
+          {categories.map(c => (
+            <button key={c.id} className={`pb2 ${activeCat === c.slug ? "active" : ""}`} onClick={() => setActiveCat(activeCat === c.slug ? null : c.slug)}>{c.icon} {c.name}</button>
           ))}
-          <div className="cart-total-row">
-            <span className="cart-total-label">Total mayorista</span>
-            <span className="cart-total-value">{fmt(cartTotal)}</span>
-          </div>
-          {cartTotal < 80000 && (
-            <p className="cart-min-warning">
-              {"⚠️ COMPRA MÍNIMA $80.000 — Te faltan "}{fmt(80000-cartTotal)}
-            </p>
-          )}
-          <button onClick={()=>{setCartOpen(false);setCheckoutOpen(true)}} className="btn-primary-outline">
-            Finalizar pedido →
-          </button>
-          <button onClick={()=>setCartOpen(false)} className="btn-secondary">
-            ← Seguir agregando productos
-          </button>
         </div>
-      </div>
-    )}
 
-    {/* MODAL CHECKOUT */}
-    {checkoutOpen&&!orderDone&&(
-      <div className="modal">
-        <div className="modal-box">
-          <h2 className="modal-title">Pedido Mayorista</h2>
-          <p className="modal-subtitle">Completá los datos de entrega</p>
-          <div className="checkout-fields">
-            <div>
-              <label className="field-label">NOMBRE</label>
-              <input className="if3" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+        {/* Listado de Productos */}
+        {Object.entries(grouped).map(([catName, prods]) => (
+          <MayoristaCategorySection key={catName} catName={catName} prods={prods} />
+        ))}
+      </main>
+
+      {/* CARRITO FLOTANTE */}
+      {cartCount>0&&!cartOpen&&(
+        <button onClick={()=>setCartOpen(true)} className="fab-cart">
+          {"🛒 Carrito "}
+          <span className="fab-cart-count">{cartCount}</span>
+        </button>
+      )}
+
+      {/* DRAWER CARRITO */}
+      {cartOpen&&(
+        <div className="drawer">
+          <div className="overlay" onClick={()=>setCartOpen(false)}/>
+          <div className="drawer-panel">
+            <div className="drawer-head">
+              <h2 className="drawer-title">Carrito Mayorista</h2>
+              <button onClick={()=>setCartOpen(false)} className="icon-close">✕</button>
             </div>
-            <div>
-              <label className="field-label">TELÉFONO</label>
-              <input className="if3" value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))}/>
-            </div>
-            <div>
-              <label className="field-label">ENTREGA</label>
-              <div className="toggle-row">
-                {[["pickup","🏪 Retiro"],["delivery","🚗 Envío"]].map(([v,l])=>(
-                  <button key={v} onClick={()=>setForm(f=>({...f,delivery:v}))}
-                    className={`toggle-btn ${form.delivery===v?"active":""}`}>{l}</button>
-                ))}
+            {/* CARTEL DE AVISO */}
+            <div className="notice-box">
+              <span className="notice-icon">💡</span>
+              <div>
+                <p className="notice-strong">¿Venís del Bot de WhatsApp o tenés muchos productos?</p>
+                <p className="notice-soft">Podés entrar y salir de la app sin problema: tu carrito quedará guardado y no se perderá ningún producto. ¡Gracias por seguir confiando en nosotros!</p>
               </div>
             </div>
-            {form.delivery==="delivery"&&(
+            {cart.map(item=>(
+              <div key={item.id} className="cart-line">
+                <img src={item.image_url||GENERIC} className="cart-line-img" alt={item.name}/>
+                <div className="cart-line-info">
+                  <p className="cart-line-name">{item.name}</p>
+                  <p className="cart-line-price">{fmt(Number(item.price_wholesale)*item.qty)}</p>
+                </div>
+                <div className="cart-line-controls">
+                  <button onClick={()=>updateQty(item.id,-1)} className="qty-btn">−</button>
+                  <span className="cart-line-qty">{item.qty}</span>
+                  <button onClick={()=>updateQty(item.id,1)} className="qty-btn">+</button>
+                  <button onClick={()=>removeFromCart(item.id)} className="qty-btn qty-btn-danger">🗑️</button>
+                </div>
+              </div>
+            ))}
+            <div className="cart-total-row">
+              <span className="cart-total-label">Total mayorista</span>
+              <span className="cart-total-value">{fmt(cartTotal)}</span>
+            </div>
+            {cartTotal < 80000 && (
+              <p className="cart-min-warning">
+                {"⚠️ COMPRA MÍNIMA $80.000 — Te faltan "}{fmt(80000-cartTotal)}
+              </p>
+            )}
+            <button onClick={()=>{setCartOpen(false);setCheckoutOpen(true)}} className="btn-primary-outline">
+              Finalizar pedido →
+            </button>
+            <button onClick={()=>setCartOpen(false)} className="btn-secondary">
+              ← Seguir agregando productos
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHECKOUT */}
+      {checkoutOpen&&!orderDone&&(
+        <div className="modal">
+          <div className="modal-box">
+            <h2 className="modal-title">Pedido Mayorista</h2>
+            <p className="modal-subtitle">Completá los datos de entrega</p>
+            <div className="checkout-fields">
               <div>
-                <label className="field-label">DIRECCIÓN</label>
-                <input className="if3" placeholder="Calle, número, barrio" value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))}/>
+                <label className="field-label">NOMBRE</label>
+                <input className="if3" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+              </div>
+              <div>
+                <label className="field-label">TELÉFONO</label>
+                <input className="if3" value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))}/>
+              </div>
+              <div>
+                <label className="field-label">ENTREGA</label>
+                <div className="toggle-row">
+                  {[["pickup","🏪 Retiro"],["delivery","🚗 Envío"]].map(([v,l])=>(
+                    <button key={v} onClick={()=>setForm(f=>({...f,delivery:v}))}
+                      className={`toggle-btn ${form.delivery===v?"active":""}`}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {form.delivery==="delivery"&&(
+                <div>
+                  <label className="field-label">DIRECCIÓN</label>
+                  <input className="if3" placeholder="Calle, número, barrio" value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))}/>
+                </div>
+              )}
+              <div>
+                <label className="field-label">MÉTODO DE PAGO</label>
+                <div className="toggle-row">
+                  {[["transfer","💳 Transferencia"],["cash","💵 Efectivo"]].map(([v,l])=>(
+                    <button key={v} onClick={()=>setPayMethod(v as "transfer"|"cash")}
+                      className={`toggle-btn ${payMethod===v?"active":""}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {payMethod==="cash"&&(
+              <div className="info-box info-box-green">
+                <p>{"💵 Pagás en efectivo al retirar o recibir el pedido"}</p>
               </div>
             )}
-            <div>
-              <label className="field-label">MÉTODO DE PAGO</label>
-              <div className="toggle-row">
-                {[["transfer","💳 Transferencia"],["cash","💵 Efectivo"]].map(([v,l])=>(
-                  <button key={v} onClick={()=>setPayMethod(v as "transfer"|"cash")}
-                    className={`toggle-btn ${payMethod===v?"active":""}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
+
+            <div className="info-box info-box-red">
+              <p>{"⚠️ COMPRA MÍNIMA $80.000"}</p>
             </div>
-          </div>
 
-          {payMethod==="cash"&&(
-            <div className="info-box info-box-green">
-              <p>{"💵 Pagás en efectivo al retirar o recibir el pedido"}</p>
+            <p className="checkout-total">Total: <strong>{fmt(cartTotal)}</strong> (Mayorista)</p>
+
+            <button onClick={handleOrder} disabled={!form.name||!form.phone} className="btn-whatsapp">
+              {"💬 Enviar pedido por WhatsApp"}
+            </button>
+            <button onClick={()=>{setCheckoutOpen(false);setCartOpen(true);}} className="btn-text">{"← Volver al carrito"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* PEDIDO EXITOSO */}
+      {orderDone&&(
+        <div className="modal">
+          <div className="modal-box modal-box-center">
+            <div className="success-icon">✅</div>
+            <h2 className="modal-title">{"¡Pedido mayorista enviado!"}</h2>
+            <p className="success-copy">En breve nos comunicamos para coordinar la entrega.</p>
+            <button onClick={()=>{setOrderDone(false);setCheckoutOpen(false);setCart([]);setForm({name:regForm.name,phone:regForm.phone,delivery:"pickup",address:""});setPayMethod("transfer");}}
+              className="btn-primary-outline">
+              🛒 Seguir comprando
+            </button>
+            <a href="/" className="btn-secondary btn-secondary-link">
+              ← Volver a tienda minorista
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* BOTÓN SUBIR */}
+      <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} className="btn-scrolltop" style={{bottom:cartCount>0?"calc(72px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
+        ↑
+      </button>
+
+      {/* MODAL FAVORITOS */}
+      {showFavs && (
+        <div className="modal" onClick={() => setShowFavs(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="drawer-head">
+              <h3 className="modal-title" style={{marginBottom:0}}>Mis favoritos</h3>
+              <button onClick={() => setShowFavs(false)} className="icon-close icon-close-circle">✕</button>
             </div>
-          )}
 
-          <div className="info-box info-box-red">
-            <p>{"⚠️ COMPRA MÍNIMA $80.000"}</p>
-          </div>
+            <div className="modal-scroll">
+              {favProds.length === 0 ? (
+                <p className="empty-msg">No tenés productos favoritos.</p>
+              ) : (
+                favProds.map((p: any) => {
+                  const inCart = cart.find(i => i.id === p.id);
+                  return (
+                    <div key={p.id} className="fav-line">
+                      <a href={`/mayorista/producto/${p.id}`} className="fav-line-link">
+                        <img src={p.image_url || GENERIC} className="fav-line-img" alt={p.name} />
+                        <div className="fav-line-info">
+                          <p className="fav-line-name">{p.name}</p>
+                          <p className="fav-line-price">{fmt(Number(p.price_wholesale))}</p>
+                        </div>
+                      </a>
 
-          <p className="checkout-total">Total: <strong>{fmt(cartTotal)}</strong> (Mayorista)</p>
-
-          <button onClick={handleOrder} disabled={!form.name||!form.phone} className="btn-whatsapp">
-            {"💬 Enviar pedido por WhatsApp"}
-          </button>
-          <button onClick={()=>{setCheckoutOpen(false);setCartOpen(true);}} className="btn-text">{"← Volver al carrito"}</button>
-        </div>
-      </div>
-    )}
-
-    {/* PEDIDO EXITOSO */}
-    {orderDone&&(
-      <div className="modal">
-        <div className="modal-box modal-box-center">
-          <div className="success-icon">✅</div>
-          <h2 className="modal-title">{"¡Pedido mayorista enviado!"}</h2>
-          <p className="success-copy">En breve nos comunicamos para coordinar la entrega.</p>
-          <button onClick={()=>{setOrderDone(false);setCheckoutOpen(false);setCart([]);setForm({name:regForm.name,phone:regForm.phone,delivery:"pickup",address:""});setPayMethod("transfer");}}
-            className="btn-primary-outline">
-            🛒 Seguir comprando
-          </button>
-          <a href="/" className="btn-secondary btn-secondary-link">
-            ← Volver a tienda minorista
-          </a>
-        </div>
-      </div>
-    )}
-
-    {/* BOTÓN SUBIR */}
-    <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} className="btn-scrolltop" style={{bottom:cartCount>0?"calc(72px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
-      ↑
-    </button>
-
-    {/* MODAL FAVORITOS */}
-    {showFavs && (
-      <div className="modal" onClick={() => setShowFavs(false)}>
-        <div className="modal-box" onClick={e => e.stopPropagation()}>
-          <div className="drawer-head">
-            <h3 className="modal-title" style={{marginBottom:0}}>Mis favoritos</h3>
-            <button onClick={() => setShowFavs(false)} className="icon-close icon-close-circle">✕</button>
-          </div>
-
-          <div className="modal-scroll">
-            {favProds.length === 0 ? (
-              <p className="empty-msg">No tenés productos favoritos.</p>
-            ) : (
-              favProds.map((p: any) => {
-                const inCart = cart.find(i => i.id === p.id);
-                return (
-                  <div key={p.id} className="fav-line">
-                    <a href={`/mayorista/producto/${p.id}`} className="fav-line-link">
-                      <img src={p.image_url || GENERIC} className="fav-line-img" alt={p.name} />
-                      <div className="fav-line-info">
-                        <p className="fav-line-name">{p.name}</p>
-                        <p className="fav-line-price">{fmt(Number(p.price_wholesale))}</p>
+                      <div className="fav-line-controls">
+                        <button onClick={(e) => { e.preventDefault(); updateQty(p.id, -1); }} className="qty-btn">−</button>
+                        <span className="fav-line-qty">{inCart?.qty || 0}</span>
+                        <button onClick={(e) => { e.preventDefault(); addToCart(p); }} className="qty-btn qty-btn-solid">+</button>
+                        <button onClick={(e) => { e.preventDefault(); toggleFav(p.id); }} className="fav-line-heart">❤️</button>
                       </div>
-                    </a>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-                    <div className="fav-line-controls">
-                      <button onClick={(e) => { e.preventDefault(); updateQty(p.id, -1); }} className="qty-btn">−</button>
-                      <span className="fav-line-qty">{inCart?.qty || 0}</span>
-                      <button onClick={(e) => { e.preventDefault(); addToCart(p); }} className="qty-btn qty-btn-solid">+</button>
-                      <button onClick={(e) => { e.preventDefault(); toggleFav(p.id); }} className="fav-line-heart">❤️</button>
+      {/* MODAL HISTORIAL */}
+      {showHistorial && (
+        <div className="modal" onClick={() => setShowHistorial(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="drawer-head">
+              <h3 className="modal-title" style={{marginBottom:0}}>Mis pedidos</h3>
+              <button onClick={() => setShowHistorial(false)} className="icon-close">✕</button>
+            </div>
+            <div className="modal-scroll">
+              {historial.map((o: any) => {
+                const items = Array.isArray(o.items) ? o.items : [];
+                return (
+                  <div key={o.id} className="order-card">
+                    <div className="order-card-head">
+                      <p className="order-id">Pedido #{String(o.id).padStart(4, "0")}</p>
+                      <p className="order-total">{fmt(Number(o.total))}</p>
+                    </div>
+                    <p className="order-date">{new Date(o.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                    <p className={`order-status ${o.status === "completed" ? "status-ok" : o.status === "cancelled" ? "status-bad" : "status-pending"}`}>
+                      {o.status === "completed" ? "Completado" : o.status === "cancelled" ? "Cancelado" : "Pendiente"}
+                    </p>
+                    {items.length > 0 && (
+                      <div className="order-items">
+                        {items.map((item: any, i: number) => (
+                          <p key={i} className="order-item-line">• {item.qty}x {item.name}</p>
+                        ))}
+                      </div>
+                    )}
+                    <div className="order-actions">
+                      <button onClick={() => { items.forEach((item: any) => { const prod = products.find(p => p.name === item.name); if (prod) addToCart(prod); }); setShowHistorial(false); setCartOpen(true); }} className="btn-outline-sm btn-outline-sm-flex">Repetir pedido</button>
+                      <button onClick={() => { const lines = items.map((i: any) => `• ${i.qty}x ${i.name} — ${fmt(i.qty * Number(i.price))}`).join("\n"); const msg = encodeURIComponent(`📦 *Repetir Pedido #${String(o.id).padStart(4, "0")} - Concepción Tecnología*\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*`); window.open(`https://wa.me/${WA}?text=${msg}`, "_blank"); }} className="btn-whatsapp-sm">WhatsApp</button>
                     </div>
                   </div>
                 );
-              })
-            )}
+              })}
+            </div>
           </div>
         </div>
-      </div>
-    )}
-
-    {/* MODAL HISTORIAL */}
-    {showHistorial && (
-      <div className="modal" onClick={() => setShowHistorial(false)}>
-        <div className="modal-box" onClick={e => e.stopPropagation()}>
-          <div className="drawer-head">
-            <h3 className="modal-title" style={{marginBottom:0}}>Mis pedidos</h3>
-            <button onClick={() => setShowHistorial(false)} className="icon-close">✕</button>
-          </div>
-          <div className="modal-scroll">
-            {historial.map((o: any) => {
-              const items = Array.isArray(o.items) ? o.items : [];
-              return (
-                <div key={o.id} className="order-card">
-                  <div className="order-card-head">
-                    <p className="order-id">Pedido #{String(o.id).padStart(4, "0")}</p>
-                    <p className="order-total">{fmt(Number(o.total))}</p>
-                  </div>
-                  <p className="order-date">{new Date(o.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}</p>
-                  <p className={`order-status ${o.status === "completed" ? "status-ok" : o.status === "cancelled" ? "status-bad" : "status-pending"}`}>
-                    {o.status === "completed" ? "Completado" : o.status === "cancelled" ? "Cancelado" : "Pendiente"}
-                  </p>
-                  {items.length > 0 && (
-                    <div className="order-items">
-                      {items.map((item: any, i: number) => (
-                        <p key={i} className="order-item-line">• {item.qty}x {item.name}</p>
-                      ))}
-                    </div>
-                  )}
-                  <div className="order-actions">
-                    <button onClick={() => { items.forEach((item: any) => { const prod = products.find(p => p.name === item.name); if (prod) addToCart(prod); }); setShowHistorial(false); setCartOpen(true); }} className="btn-outline-sm btn-outline-sm-flex">Repetir pedido</button>
-                    <button onClick={() => { const lines = items.map((i: any) => `• ${i.qty}x ${i.name} — ${fmt(i.qty * Number(i.price))}`).join("\n"); const msg = encodeURIComponent(`📦 *Repetir Pedido #${String(o.id).padStart(4, "0")} - Concepción Tecnología*\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*`); window.open(`https://wa.me/${WA}?text=${msg}`, "_blank"); }} className="btn-whatsapp-sm">WhatsApp</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
+      )}
+    </div>
   );
 }
 

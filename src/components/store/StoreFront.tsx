@@ -20,20 +20,19 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   const [activeCat, setActiveCat] = useState<string|null>(null);
   const [activeSub, setActiveSub] = useState<number|null>(null);
   const [sort, setSort]           = useState<"default"|"asc"|"desc">("default");
-const [cart, setCart] = useState<Item[]>(()=>{
-  if (typeof window === "undefined") return [];
-  try {
-    const saved = localStorage.getItem("cart_minorista");
-    return saved ? JSON.parse(saved) : [];
-  } catch { return []; }
-});
+  const [cart, setCart] = useState<Item[]>(()=>{
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("cart_minorista");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
 
-useEffect(()=>{
-  localStorage.setItem("cart_minorista", JSON.stringify(cart));
-},[cart]);
+  useEffect(()=>{
+    localStorage.setItem("cart_minorista", JSON.stringify(cart));
+  },[cart]);
 
   const [cartOpen, setCartOpen]   = useState(false);
-  
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [orderDone, setOrderDone] = useState(false);
   const [sending, setSending]     = useState(false);
@@ -69,7 +68,12 @@ useEffect(()=>{
 
   const offers   = useMemo(()=>products.filter(p=>p.is_offer&&p.available),[products]);
   const newProds = useMemo(()=>products.filter(p=>p.is_new&&p.available),[products]);
-  const random   = useMemo(()=>[...products].filter(p=>p.available).sort(()=>Math.random()-.5).slice(0,8),[products]);
+  
+  // Selección de destacados estable (no cambia aleatoriamente en cada re-render)
+  const random = useMemo(() => {
+    const avail = products.filter(p => p.available);
+    return [...avail].sort(() => 0.5 - Math.random()).slice(0, 8);
+  }, [initialProducts]);
 
   const grouped = useMemo(()=>{
     if (activeCat) return {"":filtered};
@@ -87,15 +91,16 @@ useEffect(()=>{
   const cartCount = cart.reduce((s,i)=>s+i.qty,0);
   const cartTotal = cart.reduce((s,i)=>s+i.qty*Number(i.price_retail),0);
 
- const shareProduct = (p:Prod, via:string) => {
-  const url = `${window.location.origin}/producto/${p.id}`;
-  const text = `🛒 ${p.name} — ${fmt(Number(p.price_retail))} | Concepción Tecnología`;
-  if (via==="wa") window.open(`https://wa.me/?text=${encodeURIComponent(text+"\n"+url)}`,"_blank");
-  if (via==="fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,"_blank");
-  if (via==="ig") navigator.clipboard.writeText(text+"\n"+url)
-    .then(()=>alert("✅ Link copiado. Pegalo en Instagram."))
-    .catch(()=>alert("Copiá este link:\n"+url));
-};
+  const shareProduct = (p:Prod, via:string) => {
+    const url = `${window.location.origin}/producto/${p.id}`;
+    const text = `🛒 ${p.name} — ${fmt(Number(p.price_retail))} | Concepción Tecnología`;
+    if (via==="wa") window.open(`https://wa.me/?text=${encodeURIComponent(text+"\n"+url)}`,"_blank");
+    if (via==="fb") window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,"_blank");
+    if (via==="ig") navigator.clipboard.writeText(text+"\n"+url)
+      .then(()=>alert("✅ Link copiado. Pegalo en Instagram."))
+      .catch(()=>alert("Copiá este link:\n"+url));
+  };
+
   const handleOrder = async () => {
     if (!form.name||!form.phone||sending) return;
     setSending(true);
@@ -128,8 +133,8 @@ useEffect(()=>{
     const inCart = cart.find(i=>i.id===p.id);
     return (
       <div id={`producto-${p.id}`} style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",borderRadius:14,overflow:"hidden",display:"flex",flexDirection:"column",transition:"border-color .2s",height:"100%"}}
-       onClick={()=>window.location.href=`/producto/${p.id}`}
-      onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(0,180,216,.35)"}
+        onClick={()=>window.location.href=`/producto/${p.id}`}
+        onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(0,180,216,.35)"}
         onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(255,255,255,.07)"}>
         <div style={{position:"relative",paddingBottom:"65%",overflow:"hidden",background:"#f8f8f8"}}>
           <img src={p.image_url||GENERIC} alt={p.name}
@@ -144,39 +149,35 @@ useEffect(()=>{
           <p style={{fontSize:12,fontWeight:600,color:"#1a1a1a",lineHeight:1.3}}>{p.name}</p>
           {p.description&&<p style={{fontSize:10,color:"#666",lineHeight:1.4,flex:1,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.description}</p>}
           <p style={{fontSize:16,fontWeight:800,color:"#00B4D8"}}>{fmt(Number(p.price_retail))}</p>
-            <p style={{fontSize:10,fontWeight:700,marginBottom:4,color:
-  Number(p.stock_quantity)===0?"#ef4444":
-  Number(p.stock_quantity)<=3?"#ef4444":
-  Number(p.stock_quantity)<=10?"#f59e0b":"#10b981"}}>
-  {Number(p.stock_quantity)===0?"🔴 Sin stock":
-   Number(p.stock_quantity)<=3?`🔴 ${p.stock_quantity} u.`:
-   Number(p.stock_quantity)<=10?`🟡 ${p.stock_quantity} u.`:
-   `🟢 ${p.stock_quantity} u.`}
-</p>
+          <p style={{fontSize:10,fontWeight:700,marginBottom:4,color:
+            Number(p.stock_quantity)===0?"#ef4444":
+            Number(p.stock_quantity)<=3?"#ef4444":
+            Number(p.stock_quantity)<=10?"#f59e0b":"#10b981"}}>
+            {Number(p.stock_quantity)===0?"🔴 Sin stock":
+             Number(p.stock_quantity)<=3?`🔴 ${p.stock_quantity} u.`:
+             Number(p.stock_quantity)<=10?`🟡 ${p.stock_quantity} u.`:
+             `🟢 ${p.stock_quantity} u.`}
+          </p>
 
-          {Number(p.stock_quantity) > 0 && (
-  // El contenido de los botones e input ha sido eliminado
-  null 
-)}
-<a href={`/mayorista#producto-${p.id}`} 
-  onClick={e=>e.stopPropagation()}
-  style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,width:"100%",padding:"7px",borderRadius:8,background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.25)",color:"#3b82f6",fontSize:11,fontWeight:600,textDecoration:"none",marginBottom:6}}>
-  📦 Ver precio mayorista
-</a>
-<button onClick={e=>{e.stopPropagation(); Number(p.stock_quantity)>0?addToCart(p):null;}}
-  disabled={Number(p.stock_quantity)===0}
-  style={{width:"100%",padding:"8px",borderRadius:8,background:Number(p.stock_quantity)===0?"rgba(255,255,255,.05)":"rgba(0,180,216,.12)",border:`1px solid ${Number(p.stock_quantity)===0?"rgba(255,255,255,.1)":"rgba(0,180,216,.3)"}`,color:Number(p.stock_quantity)===0?"#666":"#00B4D8",fontSize:11,fontWeight:600,cursor:Number(p.stock_quantity)===0?"not-allowed":"pointer",fontFamily:"inherit",transition:"background .2s"}}
-  onMouseEnter={e=>{if(Number(p.stock_quantity)>0)e.currentTarget.style.background="rgba(0,180,216,.25)"}}
-  onMouseLeave={e=>{if(Number(p.stock_quantity)>0)e.currentTarget.style.background="rgba(0,180,216,.12)"}}>
-  {Number(p.stock_quantity)===0?"Sin stock":inCart?`✓ (${inCart?.qty})`:"+ Agregar"}
-</button>
+          <a href={`/mayorista#producto-${p.id}`} 
+            onClick={e=>e.stopPropagation()}
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,width:"100%",padding:"7px",borderRadius:8,background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.25)",color:"#3b82f6",fontSize:11,fontWeight:600,textDecoration:"none",marginBottom:6}}>
+            📦 Ver precio mayorista
+          </a>
+          <button onClick={e=>{e.stopPropagation(); Number(p.stock_quantity)>0?addToCart(p):null;}}
+            disabled={Number(p.stock_quantity)===0}
+            style={{width:"100%",padding:"8px",borderRadius:8,background:Number(p.stock_quantity)===0?"rgba(255,255,255,.05)":"rgba(0,180,216,.12)",border:`1px solid ${Number(p.stock_quantity)===0?"rgba(255,255,255,.1)":"rgba(0,180,216,.3)"}`,color:Number(p.stock_quantity)===0?"#666":"#00B4D8",fontSize:11,fontWeight:600,cursor:Number(p.stock_quantity)===0?"not-allowed":"pointer",fontFamily:"inherit",transition:"background .2s"}}
+            onMouseEnter={e=>{if(Number(p.stock_quantity)>0)e.currentTarget.style.background="rgba(0,180,216,.25)"}}
+            onMouseLeave={e=>{if(Number(p.stock_quantity)>0)e.currentTarget.style.background="rgba(0,180,216,.12)"}}>
+            {Number(p.stock_quantity)===0?"Sin stock":inCart?`✓ (${inCart?.qty})`:"+ Agregar"}
+          </button>
           <div style={{display:"flex",gap:4,marginTop:2}}>
             {[
               ["wa", <svg key="wa" width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>],
               ["fb", <svg key="fb" width="14" height="14" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>],
               ["ig", <svg key="ig" width="14" height="14" viewBox="0 0 24 24" fill="url(#ig)"><defs><linearGradient id="ig" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="25%" stopColor="#e6683c"/><stop offset="50%" stopColor="#dc2743"/><stop offset="75%" stopColor="#cc2366"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>],
             ].map(([via, icon])=>(
-              <button onClick={e=>{e.stopPropagation(); shareProduct(p, via as string);}}
+              <button key={via as string} onClick={e=>{e.stopPropagation(); shareProduct(p, via as string);}}
                 style={{flex:1,padding:"5px 0",borderRadius:6,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"opacity .15s"}}
                 onMouseEnter={e=>e.currentTarget.style.opacity=".7"}
                 onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
@@ -204,52 +205,40 @@ useEffect(()=>{
     },[]);
 
     useEffect(()=>{
-  if (!products.length) return;
-  const hash = window.location.hash;
-  if (!hash.startsWith("#producto-")) return;
-  const id = hash.replace("#producto-","");
-  setTimeout(()=>{
-    const el = document.getElementById(`producto-${id}`);
-    if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
-  }, 500);
-},[products]);
+      if (!products.length) return;
+      const hash = window.location.hash;
+      if (!hash.startsWith("#producto-")) return;
+      const id = hash.replace("#producto-","");
+      setTimeout(()=>{
+        const el = document.getElementById(`producto-${id}`);
+        if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
+      }, 500);
+    },[products]);
 
-useEffect(()=>{
-  const params = new URLSearchParams(window.location.search);
-  const agregarId = params.get("agregarId");
-  const qty = Number(params.get("qty")||1);
-  if (!agregarId||!products.length) return;
-  const prod = products.find(p=>p.id===Number(agregarId));
-  if (!prod) return;
-  setCart(prev=>{
-    const ex = prev.find(i=>i.id===prod.id);
-    if (ex) return prev.map(i=>i.id===prod.id?{...i,qty:i.qty+qty}:i);
-    return [...prev,{...prod,qty}];
-  });
-  setCartOpen(true);
-  window.history.replaceState({},"","/");
-},[products]);
+    useEffect(()=>{
+      const params = new URLSearchParams(window.location.search);
+      const agregarId = params.get("agregarId");
+      const qty = Number(params.get("qty")||1);
+      if (!agregarId||!products.length) return;
+      const prod = products.find(p=>p.id===Number(agregarId));
+      if (!prod) return;
+      setCart(prev=>{
+        const ex = prev.find(i=>i.id===prod.id);
+        if (ex) return prev.map(i=>i.id===prod.id?{...i,qty:i.qty+qty}:i);
+        return [...prev,{...prod,qty}];
+      });
+      setCartOpen(true);
+      window.history.replaceState({},"","/");
+    },[products]);
 
-useEffect(() => {
-  const interval = setInterval(() => {
-    setCurrent((prev) => (prev + 1) % images.length);
-  }, 2000);
-
-  return () => clearInterval(interval);
-}, [images.length]);
-
-const containerRef = useRef<HTMLDivElement>(null);
-
-useEffect(() => {
-  // TypeScript ahora reconoce containerRef.current como un HTMLDivElement
-  if (containerRef.current) {
-    const width = containerRef.current.clientWidth;
-    containerRef.current.scrollTo({
-      left: current * width,
-      behavior: 'smooth'
-    });
-  }
-}, [current]);
+    useEffect(() => {
+      const interval = setInterval(() => {
+        if (!document.hidden) {
+          setCurrent((prev) => (prev + 1) % images.length);
+        }
+      }, 3000);
+      return () => clearInterval(interval);
+    }, [images.length]);
 
     const handleTouchStart = (e: React.TouchEvent) => {
       touchStartX.current = e.touches[0].clientX;
@@ -331,68 +320,67 @@ useEffect(() => {
     );
   };
 
-const InstallButton = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isIOS, setIsIOS] = useState(false);
-  const [showIOSHelp, setShowIOSHelp] = useState(false);
-  const [installed, setInstalled] = useState(false);
+  const InstallButton = () => {
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [isIOS, setIsIOS] = useState(false);
+    const [showIOSHelp, setShowIOSHelp] = useState(false);
+    const [installed, setInstalled] = useState(false);
 
-  useEffect(()=>{
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    setIsIOS(ios);
+    useEffect(()=>{
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      setIsIOS(ios);
 
-    // Verificar si ya está instalada
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setInstalled(true);
-      return;
-    }
+      if (window.matchMedia("(display-mode: standalone)").matches) {
+        setInstalled(true);
+        return;
+      }
 
-    const handler = (e:any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+      const handler = (e:any) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+      };
+      window.addEventListener("beforeinstallprompt", handler);
+      return ()=>window.removeEventListener("beforeinstallprompt", handler);
+    },[]);
+
+    if (installed) return null;
+
+    const handleClick = async() => {
+      if (isIOS) { setShowIOSHelp(true); return; }
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === "accepted") setInstalled(true);
+        setDeferredPrompt(null);
+      } else {
+        setShowIOSHelp(true);
+      }
     };
-    window.addEventListener("beforeinstallprompt", handler);
-    return ()=>window.removeEventListener("beforeinstallprompt", handler);
-  },[]);
 
-  if (installed) return null;
-
-  const handleClick = async() => {
-    if (isIOS) { setShowIOSHelp(true); return; }
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === "accepted") setInstalled(true);
-      setDeferredPrompt(null);
-    } else {
-      // Android 14 fallback — abrir instrucciones manuales
-      setShowIOSHelp(true);
-    }
+    return (
+      <>
+        <button onClick={handleClick}
+          style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:20,color:"#00B4D8",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+          📲 Instalar app
+        </button>
+        {showIOSHelp&&(
+          <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:20}} onClick={()=>setShowIOSHelp(false)}>
+            <div style={{background:"#ffffff",borderRadius:16,padding:24,width:"100%",maxWidth:400}} onClick={e=>e.stopPropagation()}>
+              <p style={{fontWeight:700,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>Instalá la app</p>
+              <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:6}}>
+                {isIOS ? "1. Tocá el botón compartir ⬆️ en Safari" : "1. Tocá los 3 puntos ⋮ en Chrome"}
+              </p>
+              <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:16}}>
+                {isIOS ? '2. Seleccioná "Agregar a pantalla de inicio"' : '2. Seleccioná "Agregar a pantalla de inicio"'}
+              </p>
+              <button onClick={()=>setShowIOSHelp(false)} style={{width:"100%",padding:12,borderRadius:10,background:"#00B4D8",border:"none",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Entendido</button>
+            </div>
+          </div>
+        )}
+      </>
+    );
   };
 
-  return (
-    <>
-      <button onClick={handleClick}
-        style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",background:"rgba(0,180,216,.1)",border:"1px solid rgba(0,180,216,.3)",borderRadius:20,color:"#00B4D8",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-        📲 Instalar app
-      </button>
-      {showIOSHelp&&(
-        <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:20}} onClick={()=>setShowIOSHelp(false)}>
-          <div style={{background:"#ffffff",borderRadius:16,padding:24,width:"100%",maxWidth:400}} onClick={e=>e.stopPropagation()}>
-            <p style={{fontWeight:700,fontSize:16,marginBottom:12,color:"#1a1a1a"}}>Instalá la app</p>
-            <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:6}}>
-              {isIOS ? "1. Tocá el botón compartir ⬆️ en Safari" : "1. Tocá los 3 puntos ⋮ en Chrome"}
-            </p>
-            <p style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:16}}>
-              {isIOS ? '2. Seleccioná "Agregar a pantalla de inicio"' : '2. Seleccioná "Agregar a pantalla de inicio"'}
-            </p>
-            <button onClick={()=>setShowIOSHelp(false)} style={{width:"100%",padding:12,borderRadius:10,background:"#00B4D8",border:"none",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Entendido</button>
-          </div>
-        </div>
-      )}
-    </>
-  );
-};
   return (
     <div style={{minHeight:"100vh",background:"#ffffff",color:"#1a1a1a",fontFamily:"'DM Sans',system-ui,sans-serif",overflowX:"hidden",width:"100%"}}>
       <style>{`
@@ -435,7 +423,6 @@ const InstallButton = () => {
         @media(min-width:768px){.banner-grid{grid-template-columns:repeat(3,1fr)}}
       `}</style>
 
-
       {/* HEADER */}
       <header style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,borderBottom:"1px solid #e5e7eb",background:"#ffffff",padding:"10px 0"}}>
         <div className="pad">
@@ -450,10 +437,10 @@ const InstallButton = () => {
               <span style={{fontSize:10,color:"#00B4D8",fontWeight:700,marginTop:2}}>{"💰 Ventas por mayor y menor"}</span>
             </div>
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",flexShrink:0}}>
-             <a href="/mayorista" style={{padding:"7px 12px",borderRadius:8,background:"#00B4D8",border:"none",color:"#ffffff",fontSize:12,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",display:"flex",flexDirection:"column",alignItems:"center",lineHeight:1.2}}>
-  <span>📦 Precios Mayoristas</span>
-  <span style={{fontSize:9,opacity:.85}}>Tocá para ver</span>
-</a>
+              <a href="/mayorista" style={{padding:"7px 12px",borderRadius:8,background:"#00B4D8",border:"none",color:"#ffffff",fontSize:12,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",display:"flex",flexDirection:"column",alignItems:"center",lineHeight:1.2}}>
+                <span>📦 Precios Mayoristas</span>
+                <span style={{fontSize:9,opacity:.85}}>Tocá para ver</span>
+              </a>
               <span style={{fontSize:9,color:"#666",marginTop:3,textAlign:"right",whiteSpace:"nowrap"}}>
                 {"Registrate · Compra mín. $80.000"}
               </span>
@@ -462,70 +449,60 @@ const InstallButton = () => {
         </div>
       </header>
 
-
       <main style={{paddingTop:"clamp(70px,12vw,90px)"}}>
+        <div className="pad" style={{paddingTop:12}}>
+          {/* BÚSQUEDA */}
+          <div style={{display:"flex",gap:8,marginBottom:10}}>
+            <div style={{position:"relative",flex:1,minWidth:0}}>
+              <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:15,pointerEvents:"none"}}>🔍</span>
+              <input className="if" placeholder="Buscar mejores precios minoristas..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            </div>
+            <select value={sort} onChange={e=>setSort(e.target.value as "default"|"asc"|"desc")}
+              style={{padding:"11px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:10,color:"#1a1a1a",fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+              <option value="default">Ordenar</option>
+              <option value="desc">Mayor precio</option>
+              <option value="asc">Menor precio</option>
+            </select>
+          </div>
 
-      
-    
+          {/* CATEGORÍAS */}
+          <div className="sx" style={{marginBottom:10}}>
+            <button className={`pb ${!activeCat?"active":""}`} onClick={()=>{playClick();setActiveCat(null);setActiveSub(null)}}>✦ Todos</button>
+            {categories.map(c=>(
+              <button key={c.id} className={`pb ${activeCat===c.slug?"active":""}`}
+                onClick={()=>{playClick();setActiveCat(activeCat===c.slug?null:c.slug);setActiveSub(null)}}>
+                {c.icon} {c.name}
+              </button>
+            ))}
+          </div>
 
-<div className="pad" style={{paddingTop:12}}>
-  {/* BÚSQUEDA */}
-  <div style={{display:"flex",gap:8,marginBottom:10}}>
-    <div style={{position:"relative",flex:1,minWidth:0}}>
-      <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:15,pointerEvents:"none"}}>🔍</span>
-      <input className="if" placeholder="Buscar mejores precios minoristas..." value={search} onChange={e=>setSearch(e.target.value)}/>
-    </div>
-    <select value={sort} onChange={e=>setSort(e.target.value as "default"|"asc"|"desc")}
-      style={{padding:"11px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:10,color:"#1a1a1a",fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
-      <option value="default">Ordenar</option>
-      <option value="desc">Mayor precio</option>
-      <option value="asc">Menor precio</option>
-    </select>
-  </div>
-
-  {/* CATEGORÍAS */}
-  <div className="sx" style={{marginBottom:10}}>
-    <button className={`pb ${!activeCat?"active":""}`} onClick={()=>{playClick();setActiveCat(null);setActiveSub(null)}}>✦ Todos</button>
-    {categories.map(c=>(
-      <button key={c.id} className={`pb ${activeCat===c.slug?"active":""}`}
-        onClick={()=>{playClick();setActiveCat(activeCat===c.slug?null:c.slug);setActiveSub(null)}}>
-        {c.icon} {c.name}
-      </button>
-    ))}
-  </div>
-
-  {/* SUBCATEGORÍAS */}
-  {activeCatData&&(activeCatData.subcategories?.length??0)>0&&(
-    <div className="sx" style={{marginBottom:10}}>
-      <button className={`pb ${!activeSub?"active":""}`} onClick={()=>{playClick();setActiveSub(null)}} style={{fontSize:11,padding:"5px 10px"}}>Todos</button>
-      {activeCatData.subcategories.map(s=>(
-        <button key={s.id} className={`pb ${activeSub===s.id?"active":""}`}
-          onClick={()=>{playClick();setActiveSub(activeSub===s.id?null:s.id)}} style={{fontSize:11,padding:"5px 10px"}}>
-          {s.name}
-        </button>
-      ))}
-    </div>
-  )}
-
-  
-  
+          {/* SUBCATEGORÍAS */}
+          {activeCatData&&(activeCatData.subcategories?.length??0)>0&&(
+            <div className="sx" style={{marginBottom:10}}>
+              <button className={`pb ${!activeSub?"active":""}`} onClick={()=>{playClick();setActiveSub(null)}} style={{fontSize:11,padding:"5px 10px"}}>Todos</button>
+              {activeCatData.subcategories.map(s=>(
+                <button key={s.id} className={`pb ${activeSub===s.id?"active":""}`}
+                  onClick={()=>{playClick();setActiveSub(activeSub===s.id?null:s.id)}} style={{fontSize:11,padding:"5px 10px"}}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* OFERTAS Y NOVEDADES */}
           {!activeCat&&!search&&(
             <section style={{marginBottom:28}}>
               <h2 className="st">{"🔥 Ofertas y ✨ Novedades"}</h2>
               <Carrusel images={[
-              { src:"/images/12.jpeg", alt:"novedad 26"},
-              { src:"/images/6.jpg", alt:"novedad 6"},
-              { src:"/images/13.jpeg", alt:"novedad 27"},
-              { src:"/images/11.jpeg", alt:"novedad 28"},
-              { src:"/images/14.jpeg", alt:"novedad 29"},
+                { src:"/images/12.jpeg", alt:"novedad 26"},
+                { src:"/images/6.jpg", alt:"novedad 6"},
+                { src:"/images/13.jpeg", alt:"novedad 27"},
+                { src:"/images/11.jpeg", alt:"novedad 28"},
+                { src:"/images/14.jpeg", alt:"novedad 29"},
                 { src:"/images/novedad3.jpg", alt:"Oferta 3" },
                 { src:"/images/novedad1.jpg", alt:"Novedad 1" },
                 { src:"/images/1.jpg", alt:"Novedad 2" },
                 { src:"/images/5.jpg", alt:"Novedad 5" },
-                
-                
               ]}/>
               {offers.length>0&&(
                 <div className="sx" style={{marginTop:14}}>
@@ -549,7 +526,7 @@ const InstallButton = () => {
           {Object.entries(grouped).map(([catName,prods])=>(
             <CategorySection key={catName||"all"} catName={catName} prods={prods} categories={categories}/>
           ))}
-          </div>
+        </div>
       </main>
 
       {/* FOOTER */}
@@ -562,11 +539,11 @@ const InstallButton = () => {
           </div>
           <div style={{display:"flex",gap:10}}>
             {[
-  [<svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>,"https://www.facebook.com/share/1GtkZrvC6L/?mibextid=wwXIfr"],
-  [<svg width="18" height="18" viewBox="0 0 24 24" fill="url(#igf)"><defs><linearGradient id="igf" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="50%" stopColor="#dc2743"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>,"https://www.instagram.com/concepciontecnologia?igsh=azFiYWFrOWhpcGV1"],
-  [<svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,`https://wa.me/${WA}`],
-
-[<svg key="tt" width="18" height="18" viewBox="0 0 24 24" fill="#000000"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.78a4.85 4.85 0 01-1.01-.09z"/></svg>,"https://www.tiktok.com/@concepciontecnologia?_r=1&_t=ZS-96fPI9A4yBQ"],].map(([icon,href])=>(
+              [<svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>,"https://www.facebook.com/share/1GtkZrvC6L/?mibextid=wwXIfr"],
+              [<svg width="18" height="18" viewBox="0 0 24 24" fill="url(#igf)"><defs><linearGradient id="igf" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="50%" stopColor="#dc2743"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>,"https://www.instagram.com/concepciontecnologia?igsh=azFiYWFrOWhpcGV1"],
+              [<svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,`https://wa.me/${WA}`],
+              [<svg key="tt" width="18" height="18" viewBox="0 0 24 24" fill="#000000"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.78a4.85 4.85 0 01-1.01-.09z"/></svg>,"https://www.tiktok.com/@concepciontecnologia?_r=1&_t=ZS-96fPI9A4yBQ"],
+            ].map(([icon,href])=>(
               <a key={href as string} href={href as string} target="_blank"
                 style={{width:40,height:40,borderRadius:10,background:"#ffffff",border:"1px solid #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,textDecoration:"none",transition:"border-color .2s"}}
                 onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(0,180,216,.4)"}
@@ -579,15 +556,15 @@ const InstallButton = () => {
       </footer>
 
       {/* BOTÓN WSP FLOTANTE */}
-<a href={`https://wa.me/${WA}?text=${encodeURIComponent("Hola! Quiero hacer una consulta.")}`} target="_blank"
-  style={{position:"fixed",bottom:72,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"#25D366",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 12px rgba(37,211,102,.4)",textDecoration:"none"}}>
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-</a>
+      <a href={`https://wa.me/${WA}?text=${encodeURIComponent("Hola! Quiero hacer una consulta.")}`} target="_blank"
+        style={{position:"fixed",bottom:72,right:20,zIndex:9000,width:42,height:42,borderRadius:"50%",background:"#25D366",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 12px rgba(37,211,102,.4)",textDecoration:"none"}}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      </a>
 
-{/* BOTÓN INSTALAR FLOTANTE */}
-<div style={{position:"fixed",bottom:20,left:20,zIndex:9000}}>
-  <InstallButton/>
-</div>
+      {/* BOTÓN INSTALAR FLOTANTE */}
+      <div style={{position:"fixed",bottom:20,left:20,zIndex:9000}}>
+        <InstallButton/>
+      </div>
 
       {/* BOTÓN SUBIR */}
       <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
@@ -619,11 +596,11 @@ const InstallButton = () => {
                   <p style={{fontSize:13,color:"#00B4D8",fontWeight:700}}>{fmt(Number(item.price_retail)*item.qty)}</p>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:7}}>
-  <button onClick={()=>updateQty(item.id,-1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-  <span style={{fontSize:13,fontWeight:600,minWidth:14,textAlign:"center",color:"#1a1a1a"}}>{item.qty}</span>
-  <button onClick={()=>updateQty(item.id,1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-  <button onClick={()=>setCart(prev=>prev.filter(i=>i.id!==item.id))} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(239,68,68,.3)",background:"rgba(239,68,68,.08)",color:"#ef4444",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>
-</div>
+                  <button onClick={()=>updateQty(item.id,-1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+                  <span style={{fontSize:13,fontWeight:600,minWidth:14,textAlign:"center",color:"#1a1a1a"}}>{item.qty}</span>
+                  <button onClick={()=>updateQty(item.id,1)} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.08)",color:"#00B4D8",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                  <button onClick={()=>setCart(prev=>prev.filter(i=>i.id!==item.id))} style={{width:26,height:26,borderRadius:"50%",border:"1px solid rgba(239,68,68,.3)",background:"rgba(239,68,68,.08)",color:"#ef4444",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>
+                </div>
               </div>
             ))}
             <div style={{padding:"12px 0",borderTop:"1px solid #e5e7eb",marginBottom:12,display:"flex",justifyContent:"space-between"}}>
@@ -681,8 +658,6 @@ const InstallButton = () => {
               </div>
             </div>
 
-         
-            
             {payMethod==="cash"&&(
               <div style={{padding:"10px 13px",background:"rgba(16,185,129,.06)",borderRadius:10,border:"1px solid rgba(16,185,129,.2)",marginBottom:12}}>
                 <p style={{fontSize:12,color:"#10b981",fontWeight:600}}>{"💵 Pagás en efectivo al retirar o recibir el pedido"}</p>
@@ -691,7 +666,6 @@ const InstallButton = () => {
 
             <p style={{fontSize:13,color:"#666",textAlign:"center",marginBottom:12}}>Total: <strong style={{color:"#00B4D8"}}>{fmt(cartTotal)}</strong></p>
 
-           
             {countdown!==null ? (
               <div style={{textAlign:"center",padding:"16px 0"}}>
                 <div style={{fontSize:48,fontWeight:800,color:"#00B4D8",fontFamily:"'Syne',sans-serif",lineHeight:1}}>{countdown}</div>
