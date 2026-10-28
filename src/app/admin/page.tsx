@@ -572,9 +572,9 @@ ${lines}
         .kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
         .kpi-value{font-size:clamp(18px,4.6vw,24px);font-weight:700}
         .dash-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
-        .prod-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:stretch}
-        .prod-actions .toggle{align-self:center}
-        .act-btn{text-align:center;display:flex;align-items:center;justify-content:center;min-height:30px;white-space:nowrap}
+        .prod-actions{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;flex:1 1 100%;padding-top:10px;border-top:1px solid #f3f4f6}
+        .prod-actions .toggle{margin-right:4px}
+        .act-btn{flex:1 1 0;text-align:center;display:flex;align-items:center;justify-content:center;min-height:36px;white-space:nowrap}
         .page-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
 
         /* COMPUTADORA: menú lateral a la izquierda */
@@ -584,8 +584,8 @@ ${lines}
           .sidebar{display:flex;flex-direction:column;position:sticky;top:0;height:100vh;background:#ffffff;border-right:1px solid #e5e7eb;padding:20px 14px;overflow-y:auto}
           .admin-content{padding:28px 32px 60px}
           .kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
-          .prod-actions{flex-direction:row;align-items:center}
-          .prod-actions .toggle{align-self:auto;margin-right:4px}
+          .prod-actions{flex:0 0 auto;flex-wrap:nowrap;padding-top:0;border-top:none}
+          .act-btn{flex:0 0 auto}
         }
         @media(min-width:1100px){
           .dash-grid{grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start}
@@ -600,7 +600,7 @@ ${lines}
 
       {/* CELULAR: BARRA SUPERIOR */}
       <div className="topbar">
-        <p style={{fontSize:16,fontWeight:800,color:"#1a1a1a"}}><span style={{color:"#00B4D8"}}>Concepción</span> Tecnologia <span style={{fontSize:11,color:"#999",fontWeight:400}}>Admin</span></p>
+        <p style={{fontSize:16,fontWeight:800,color:"#1a1a1a"}}><span style={{color:"#00B4D8"}}>Concepción</span> Tech <span style={{fontSize:11,color:"#999",fontWeight:400}}>Admin</span></p>
         <button onClick={onLogout} style={{padding:"6px 12px",borderRadius:7,background:"#f3f4f6",border:"1px solid #e5e7eb",color:"#444",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Salir</button>
       </div>
 

@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 
 const WA    = process.env.NEXT_PUBLIC_WHATSAPP!;
+const WA_FLOAT = "543865443450"; // número del botón de WhatsApp
+const WA_PATH = "M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z";
 const ALIAS = process.env.NEXT_PUBLIC_STORE_ALIAS!;
 const MAPS  = process.env.NEXT_PUBLIC_MAPS_URL!;
 const fmt = (n: number) => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(n);
@@ -24,6 +26,14 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   const [activeTab, setActiveTab] = useState<"home"|"cats"|"account">("home");
   const [catsOpen, setCatsOpen]   = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+
+  // Hace que la barra inferior llegue hasta el borde real de la pantalla (Chrome/Safari en iPhone)
+  useEffect(()=>{
+    const m = document.querySelector('meta[name="viewport"]');
+    if (m && !(m.getAttribute("content")||"").includes("viewport-fit")) {
+      m.setAttribute("content", (m.getAttribute("content")||"width=device-width, initial-scale=1") + ", viewport-fit=cover");
+    }
+  },[]);
 
   // CARRITO
   const [cart, setCart] = useState<Item[]>(()=>{
@@ -299,7 +309,7 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
   };
 
   return (
-    <div style={{minHeight:"100vh",background:"#F8FAFC",color:"#111827",fontFamily:"'Inter',system-ui,sans-serif",width:"100%",maxWidth:"100vw",overflowX:"clip",paddingBottom:80,boxSizing:"border-box"}}>
+    <div style={{minHeight:"100vh",background:"#F8FAFC",color:"#111827",fontFamily:"'Inter',system-ui,sans-serif",width:"100%",maxWidth:"100vw",overflowX:"clip",paddingBottom:"calc(80px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -324,16 +334,19 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
         @media(min-width:1200px){.pad{padding:0 48px;}}
 
         /* HEADER MOBILE */
-        .mobile-header { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; background: #ffffff; border-bottom: 1px solid #E5E7EB; box-shadow: 0 1px 8px rgba(0,0,0,0.04); width:100%; box-sizing:border-box; }
+        .mobile-header { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; padding-top: env(safe-area-inset-top,0px); background: #ffffff; border-bottom: 1px solid #E5E7EB; box-shadow: 0 1px 8px rgba(0,0,0,0.04); width:100%; box-sizing:border-box; }
         @media(min-width:768px){ .mobile-header { display: none !important; } }
         
-        .main-content { padding-top: 60px; width:100%; max-width:100%; box-sizing:border-box; overflow-x:clip; }
+        .main-content { padding-top: calc(60px + env(safe-area-inset-top,0px)); width:100%; max-width:100%; box-sizing:border-box; overflow-x:clip; }
         @media(min-width:768px){ .main-content { padding-top: 0 !important; } }
 
         /* BOTTOM NAV */
+        .bnav::after{content:"";position:absolute;left:0;right:0;top:100%;height:240px;background:#ffffff}
         .bnav{position:fixed;bottom:0;left:0;right:0;z-index:9000;background:#ffffff;border-top:1px solid #E5E7EB;display:flex;justify-content:space-around;align-items:center;padding:8px 0 calc(8px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 20px rgba(0,0,0,0.06)}
         @media(min-width:768px){.bnav{display:none}}
-        .bni{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 20px;border:none;background:transparent;font-family:inherit;min-width:60px}
+        .bni{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 2px;border:none;background:transparent;font-family:inherit;flex:1;min-width:0;text-decoration:none}
+        .bni-icon{position:relative;display:flex;align-items:center;justify-content:center;height:24px}
+        .bni-badge{position:absolute;top:-4px;right:-10px;min-width:16px;height:16px;padding:0 4px;border-radius:20px;background:#00B4D8;color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1}
         .bni-icon{font-size:20px;transition:transform .15s}
         .bni.active .bni-icon{transform:scale(1.15)}
         .bni-label{font-size:10px;font-weight:600;color:#9CA3AF;transition:color .15s}
@@ -347,7 +360,8 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
 
         /* HERO DESKTOP */
         .hero{display:none;background:linear-gradient(135deg,#0D1117 0%,#0D2137 50%,#0D3355 100%);padding:50px 24px;position:relative;overflow:hidden;width:100%;box-sizing:border-box;}
-         @media(min-width:768px){.hero{display:block;}}
+        @media(min-width:768px){.hero{display:block;}}
+
         /* GRILLA PRINCIPAL DESKTOP (ALTURA COMPLETA PARA QUE EL STICKY CUBRA TODA LA VISTA) */
         .body-with-sidebar{display:block; position:relative; width:100%; max-width:100%; box-sizing:border-box; overflow-x:clip;}
         @media(min-width:768px){
@@ -388,11 +402,15 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
         .fab-up { position: fixed; right: 20px; z-index: 8999; width: 44px; height: 44px; border-radius: 50%; background: rgba(0,180,216,.15); border: 1.5px solid rgba(0,180,216,.4); color: #00B4D8; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: bottom .3s; }
 
         @media(max-width: 767px) {
-          .fab-wa { bottom: 84px; }
-          .fab-cart { bottom: 144px; }
-          .fab-up.has-cart { bottom: 204px; }
-          .fab-up.no-cart { bottom: 144px; }
-        }
+  .fab-wa, .fab-cart { display: none !important; }
+  .fab-up.has-cart, .fab-up.no-cart {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    right: 12px;
+    width: 40px;
+    height: 40px;
+    background: rgba(255,255,255,.95);
+  }
+}
         @media(min-width: 768px) {
           .fab-wa { bottom: 24px; }
           .fab-cart { bottom: 84px; }
@@ -608,13 +626,18 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
         {[
           ["home","🏠","Inicio",()=>{ setActiveCat(null); setSearch(""); window.scrollTo({top:0,behavior:"smooth"}); setActiveTab("home"); }],
           ["cats","📦","Categorías",()=>{ setActiveTab("cats"); setCatsOpen(true); }],
+          ["cart","🛒","Carrito",()=>{ setCartOpen(true); }],
           ["account","👤","Cuenta",()=>{ setActiveTab("account"); setAccountOpen(true); if(userReg.phone) loadHistorial(userReg.phone); }],
         ].map(([tab,icon,label,fn])=>(
           <button key={tab as string} className={`bni${activeTab===tab?" active":""}`} onClick={fn as any}>
-            <span className="bni-icon">{icon as string}</span>
+            <span className="bni-icon">{icon as string}{tab==="cart"&&cartCount>0&&<span className="bni-badge">{cartCount}</span>}</span>
             <span className="bni-label">{label as string}</span>
           </button>
         ))}
+        <a href={`https://wa.me/${WA_FLOAT}?text=${encodeURIComponent("Hola! Quiero hacer una consulta.")}`} target="_blank" rel="noopener noreferrer" className="bni">
+          <span className="bni-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="#25D366"><path d={WA_PATH}/></svg></span>
+          <span className="bni-label">WhatsApp</span>
+        </a>
       </nav>
 
       {/* ── PANEL CATEGORÍAS (mobile) ── */}
@@ -783,7 +806,8 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
       )}
 
       {/* ── FAB WSP ── */}
-<a href={`https://wa.me/543865443450?text=${encodeURIComponent("Hola!")}`} target="_blank" className="fab-wa">        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      <a href={`https://wa.me/${WA_FLOAT}?text=${encodeURIComponent("Hola! Quiero hacer una consulta.")}`} target="_blank" rel="noopener noreferrer" className="fab-wa">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
       </a>
 
       {/* ── FAB SUBIR ── */}
@@ -822,11 +846,12 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
                 </div>
               </div>
             ))}
+            {cart.length===0&&<p style={{textAlign:"center",color:"#6B7280",fontSize:14,padding:"32px 0"}}>Tu carrito está vacío</p>}
             <div style={{padding:"12px 0",borderTop:"1px solid #E5E7EB",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{color:"#6B7280",fontSize:14}}>Total</span>
               <span style={{fontSize:22,fontWeight:800,color:"#00B4D8"}}>{fmt(cartTotal)}</span>
             </div>
-            <button onClick={()=>{setCartOpen(false);setCheckoutOpen(true);}} style={{width:"100%",padding:13,borderRadius:14,background:"#00B4D8",border:"none",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Finalizar pedido →</button>
+            {cart.length>0&&<button onClick={()=>{setCartOpen(false);setCheckoutOpen(true);}} style={{width:"100%",padding:13,borderRadius:14,background:"#00B4D8",border:"none",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Finalizar pedido →</button>}
             <button onClick={()=>setCartOpen(false)} style={{marginTop:8,width:"100%",background:"none",border:"none",color:"#6B7280",fontSize:12,cursor:"pointer",padding:7,fontFamily:"inherit"}}>← Seguir comprando</button>
           </div>
         </div>
