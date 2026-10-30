@@ -1,6 +1,53 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 
+// ─── COMPONENTE LOADING SCREEN ───
+const Letters = ({ text, start }: { text: string; start: number }) => (
+  <>
+    {text.split("").map((c, i) => (
+      <span key={i} className="ls-letter" style={{ animationDelay: `${(start + i) * 55}ms` }}>
+        {c}
+      </span>
+    ))}
+  </>
+);
+
+function LoadingScreen({ isFading }: { isFading: boolean }) {
+  return (
+    <div className={`ls-wrap ${isFading ? "ls-fade-out" : ""}`} role="status" aria-label=" ">
+      <style>{`
+        .ls-wrap{position:fixed;inset:0;z-index:99999;background:#F8FAFC;display:flex;align-items:center;justify-content:center;font-family:'Inter',system-ui,sans-serif;opacity:1;transition:opacity 0.4s ease}
+        .ls-fade-out{opacity:0;pointer-events:none}
+        .ls-inner{display:flex;flex-direction:column;align-items:center;gap:18px;padding:0 20px;text-align:center}
+        .ls-title{font-size:clamp(26px,7vw,42px);font-weight:800;letter-spacing:-.5px;line-height:1.15;color:#111827}
+        .ls-cyan{color:#00B4D8}
+        .ls-line{display:block}
+        @media(min-width:640px){.ls-line{display:inline}}
+        .ls-letter{display:inline-block;opacity:0;transform:translateY(14px);animation:ls-in .5s ease forwards}
+        .ls-space{display:inline-block;width:.3em}
+        .ls-bar{width:140px;height:3px;border-radius:3px;background:#E5E7EB;overflow:hidden;opacity:0;animation:ls-fade .4s ease 1s forwards}
+        .ls-bar span{display:block;height:100%;width:45%;border-radius:3px;background:linear-gradient(90deg,#0096C7,#00B4D8);animation:ls-move 1.1s ease-in-out infinite}
+        @keyframes ls-in{to{opacity:1;transform:translateY(0)}}
+        @keyframes ls-fade{to{opacity:1}}
+        @keyframes ls-move{0%{transform:translateX(-110%)}100%{transform:translateX(250%)}}
+        @media(prefers-reduced-motion:reduce){
+          .ls-letter{animation:none;opacity:1;transform:none}
+          .ls-bar{animation:none;opacity:1}
+          .ls-bar span{animation:none;width:100%}
+        }
+      `}</style>
+      <div className="ls-inner">
+        <p className="ls-title">
+          <span className="ls-line ls-cyan"><Letters text="Concepción" start={0} /></span>
+          <span className="ls-space" />
+          <span className="ls-line"><Letters text="Tecnología" start={10} /></span>
+        </p>
+        <div className="ls-bar"><span /></div>
+      </div>
+    </div>
+  );
+}
+
 const WA    = process.env.NEXT_PUBLIC_WHATSAPP!;
 const WA_FLOAT = "543865443450"; // número del botón de WhatsApp
 const WA_PATH = "M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z";
@@ -18,11 +65,27 @@ type Prod = { id:number; name:string; description:string; category_name:string; 
 type Item = Prod & { qty:number };
 
 export default function StoreFront({ initialProducts, categories }: { initialProducts:Prod[]; categories:Cat[] }) {
+  // ─── ESTADO DE CARGA Y TRANSICIÓN SUAVE ───
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFading, setIsFading] = useState(false);
+
+  useEffect(() => {
+    // Comienza a desvanecerse a los 1200ms
+    const fadeTimer = setTimeout(() => setIsFading(true), 1200);
+    // Remueve el componente del DOM una vez terminada la animación de desvanecimiento (1200ms + 400ms)
+    const removeTimer = setTimeout(() => setIsLoading(false), 1600);
+    
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, []);
+
   const [products]  = useState<Prod[]>(initialProducts);
-  const [search, setSearch]       = useState("");
+  const [search, setSearch]        = useState("");
   const [activeCat, setActiveCat] = useState<string|null>(null);
   const [activeSub, setActiveSub] = useState<number|null>(null);
-  const [sort, setSort]           = useState<"default"|"asc"|"desc">("default");
+  const [sort, setSort]            = useState<"default"|"asc"|"desc">("default");
   const [activeTab, setActiveTab] = useState<"home"|"cats"|"account">("home");
   const [catsOpen, setCatsOpen]   = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -310,6 +373,9 @@ export default function StoreFront({ initialProducts, categories }: { initialPro
 
   return (
     <div style={{minHeight:"100vh",background:"#F8FAFC",color:"#111827",fontFamily:"'Inter',system-ui,sans-serif",width:"100%",maxWidth:"100vw",overflowX:"clip",paddingBottom:"calc(80px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}}>
+      {/* ── PANTALLA DE CARGA INICIAL ── */}
+      {isLoading && <LoadingScreen isFading={isFading} />}
+
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
