@@ -31,13 +31,9 @@ export default function HomePage() {
   }
 };
 
-  useEffect(() => {
-  loadData();
-  const interval = setInterval(loadData, 3600000); // 1 hora
-  return () => {
-    clearInterval(interval);
-  };
-}, []);
+   useEffect(() => {
+    loadData(); // carga una sola vez al entrar
+  }, []);
 
   if (loading) return (
     <div style={{minHeight:"100vh",background:"#080c10",display:"flex",alignItems:"center",justifyContent:"center",color:"#445",fontFamily:"sans-serif",fontSize:14}}>

@@ -288,12 +288,20 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
 
   const handleOrder=async()=>{
     if(!form.name||!form.phone)return;
-    try {
-      await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},
+       try {
+      const res = await fetch("/api/orders",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({customer_name:form.name,phone:form.phone,email:"",sale_type:"wholesale",
           delivery_type:form.delivery,address:form.address||null,
           items:cart.map(i=>({id:i.id,name:i.name,qty:i.qty,price:Number(i.price_wholesale)})),total:cartTotal})});
-    } catch(e){}
+      if (!res.ok) {
+        const d = await res.json().catch(()=>({}));
+        alert(`⚠️ ${d.error || "No pudimos registrar el pedido. Probá de nuevo."}`);
+        return;
+      }
+    } catch(e){
+      alert("⚠️ Sin conexión. Revisá tu internet y probá de nuevo.");
+      return;
+    }
     const lines=cart.map(i=>`• ${i.qty}x ${i.name} — ${fmt(i.qty*Number(i.price_wholesale))}`).join("\n");
     const msg=encodeURIComponent(`📦 *Pedido Mayorista - Concepción Tecnología*\n\n👤 ${form.name}\n📞 ${form.phone}\n📦 ${form.delivery==="pickup"?"Retira en local":`Envío: ${form.address}`}\n💳 Pago: ${payMethod==="transfer"?"Transferencia":"Efectivo"}\n\n${lines}\n\n*Total: ${fmt(cartTotal)}*`);
     window.open(`https://wa.me/${WA}?text=${msg}`,"_blank");
