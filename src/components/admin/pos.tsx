@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import CustomerPicker, { type PickedCustomer } from "@/components/admin/CustomerPicker";
 import { toWhatsApp, fmtPhone } from "@/lib/phone";
+import { ticketPdf } from "@/lib/ticketPdf";
 
 export const fmt = (n: number) => {
   const v = n || 0;
@@ -107,9 +108,10 @@ export function printTicket(saleId: number) {
 // ─── Ticket por WhatsApp (por si falla la impresora) ───────────────
 type TicketData = {
   sale: { id: number; status: string; created_at: string; total: number; subtotal: number; discount: number; customer_phone: string | null;
+          price_list?: string | null; customer_name?: string | null; customer_address?: string | null;
           items: { name: string; quantity: number; unit_price: number; subtotal: number }[];
           payments: { method: "cash" | "transfer"; amount: number }[] };
-  business: { name: string; footer: string };
+  business: { name: string; footer: string; address?: string; phone?: string; header?: string };
   share_key: string | null;
 };
 function ticketMessage(d: TicketData) {
@@ -144,8 +146,10 @@ const digits = (s: string) => s.replace(/\D/g, "");
 
 /** Ventana para mandar el ticket al WhatsApp del cliente.
  *  Recuerda los números: los de esta compu y los clientes guardados (con nombre). */
-export function ShareTicket({ saleId, onClose }: { saleId: number; onClose: () => void }) {
+export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: number; onClose: () => void; afterSale?: boolean }) {
   const [data, setData] = useState<TicketData | null>(null);
+  const [pdf, setPdf] = useState<File | null>(null);
+  const [pdfNote, setPdfNote] = useState("");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<Contact | null>(null);
@@ -153,8 +157,10 @@ export function ShareTicket({ saleId, onClose }: { saleId: number; onClose: () =
   const [recent] = useState<Contact[]>(() => readRecent());
   const [err, setErr] = useState("");
   useEffect(() => {
-    api(`/api/pos/sales/${saleId}`).then((d: TicketData & { sale: { customer_name?: string | null } }) => {
+    api(`/api/pos/sales/${saleId}`).then((d: TicketData) => {
       setData(d);
+      // El PDF se arma apenas llegan los datos, así al tocar "PDF" se comparte en el mismo clic
+      ticketPdf(d).then((blob) => setPdf(new File([blob], `ticket-${String(saleId).padStart(6, "0")}.pdf`, { type: "application/pdf" }))).catch(() => {});
       if (d.sale.customer_phone) {
         setPhone(fmtPhone(d.sale.customer_phone));
         setPicked({ phone: d.sale.customer_phone, name: d.sale.customer_name || null });
@@ -186,24 +192,51 @@ export function ShareTicket({ saleId, onClose }: { saleId: number; onClose: () =
 
   const choose = (c: Contact) => { setPicked(c); setPhone(fmtPhone(c.phone)); setName(c.name || ""); };
 
-  const send = () => {
-    if (!data || !num) return;
-    // Se abre en el mismo clic (si no, el navegador lo bloquea)
-    window.open(`https://wa.me/${num}?text=${encodeURIComponent(ticketMessage(data))}`, "_blank", "noopener");
+  const remember = () => {
+    if (!num) return;
     const who = picked?.name || name.trim() || null;
     saveRecent({ phone: num, name: who, customer_id: picked?.customer_id ?? null });
-    // Queda guardado en el cliente (o se crea, si se escribió el nombre) — no frena el envío si falla
     api(`/api/pos/sales/${saleId}/share`, {
       method: "POST",
       body: JSON.stringify({ phone: num, name: picked ? null : name.trim() || null, customer_id: picked?.customer_id ?? null }),
     }).catch(() => {});
+  };
+
+  // Mandar el PDF: en el celular (y en la compu con Windows) se abre "Compartir" y se elige WhatsApp.
+  // Si el navegador no puede compartir archivos: se descarga el PDF y se abre el chat para adjuntarlo.
+  const sendPdf = async () => {
+    if (!pdf || !data) return;
+    const text = `Comprobante de compra N° ${String(saleId).padStart(6, "0")} – ${data.business.name}`;
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+    if (nav.canShare?.({ files: [pdf] })) {
+      try { await navigator.share({ files: [pdf], title: text, text }); remember(); onClose(); return; }
+      catch (e: any) { if (e?.name === "AbortError") return; }
+    }
+    const url = URL.createObjectURL(pdf);
+    const a = document.createElement("a"); a.href = url; a.download = pdf.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    if (num) {
+      window.open(`https://wa.me/${num}?text=${encodeURIComponent(`¡Hola! Te envío el comprobante de tu compra (N° ${String(saleId).padStart(6, "0")}). Te lo adjunto en PDF.`)}`, "_blank", "noopener");
+      remember();
+      setPdfNote(`Se descargó ${pdf.name}. En el chat que se abrió, tocá el clip 📎 y adjuntalo.`);
+    } else {
+      setPdfNote(`Se descargó ${pdf.name}. Para mandarlo por WhatsApp, escribí el número arriba y tocá "PDF" de nuevo.`);
+    }
+  };
+
+  const send = () => {
+    if (!data || !num) return;
+    // Se abre en el mismo clic (si no, el navegador lo bloquea)
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(ticketMessage(data))}`, "_blank", "noopener");
+    remember();   // queda guardado (y el cliente se crea si se escribió el nombre) — no frena el envío si falla
     onClose();
   };
 
   return (
     <Modal onClose={onClose}>
+      {afterSale && <div style={{ fontSize: 13, fontWeight: 700, color: "#059669", background: "rgba(16,185,129,.1)", border: "1px solid rgba(16,185,129,.3)", borderRadius: 8, padding: "7px 10px", marginBottom: 10 }}>✓ Venta #{saleId} cobrada{data ? ` · ${fmt(data.sale.total)}` : ""}</div>}
       <h3 style={{ fontSize: 17, fontWeight: 700 }}>Enviar ticket por WhatsApp</h3>
-      <p style={{ fontSize: 13, color: "#666", marginTop: 4 }}>Venta #{saleId}{data ? ` · ${fmt(data.sale.total)}` : ""}. Buscá el cliente o escribí su número.</p>
+      <p style={{ fontSize: 13, color: "#666", marginTop: 4 }}>{afterSale ? "" : `Venta #${saleId}${data ? ` · ${fmt(data.sale.total)}` : ""}. `}Buscá el cliente o escribí su número.</p>
       {err && <p style={{ color: "#ef4444", fontSize: 13, marginTop: 8 }}>{err}</p>}
 
       <label style={{ ...label, marginTop: 14 }}>WHATSAPP O NOMBRE DEL CLIENTE</label>
@@ -243,8 +276,14 @@ export function ShareTicket({ saleId, onClose }: { saleId: number; onClose: () =
         </>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
-        <button onClick={onClose} style={btn("gray")}>Cancelar</button>
+      {pdfNote && <p style={{ fontSize: 12, marginTop: 10, padding: "8px 10px", borderRadius: 8, background: "#eff6ff", color: "#1d4ed8" }}>{pdfNote}</p>}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" }}>
+        <button onClick={onClose} style={btn("gray")}>{afterSale ? "No enviar" : "Cancelar"}</button>
+        <button onClick={sendPdf} disabled={!pdf} title="Manda el ticket como archivo PDF"
+          style={{ ...btn("gray"), fontWeight: 700, opacity: pdf ? 1 : 0.5 }}>
+          📄 PDF
+        </button>
         <button onClick={send} disabled={!data || !valid}
           style={{ ...btn("primary"), background: "#25D366", borderColor: "#25D366", opacity: !data || !valid ? 0.5 : 1 }}>
           Enviar por WhatsApp
@@ -254,8 +293,9 @@ export function ShareTicket({ saleId, onClose }: { saleId: number; onClose: () =
   );
 }
 
-const AUTO_TICKET_KEY = "ct_auto_ticket";
-const readAutoTicket = () => { try { return localStorage.getItem(AUTO_TICKET_KEY) !== "0"; } catch { return true; } };
+// Imprimir el ticket al cobrar: apagado por defecto (ahora el ticket se manda por WhatsApp)
+const AUTO_TICKET_KEY = "ct_auto_ticket_v2";
+const readAutoTicket = () => { try { return localStorage.getItem(AUTO_TICKET_KEY) === "1"; } catch { return false; } };
 const saveAutoTicket = (v: boolean) => { try { localStorage.setItem(AUTO_TICKET_KEY, v ? "1" : "0"); } catch {} };
 
 export function Row({ k, v, strong, color }: { k: string; v: string; strong?: boolean; color?: string }) {
@@ -347,7 +387,9 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string; saleId?: number } | null>(null);
   const [shareId, setShareId] = useState<number | null>(null);
-  const [autoTicket, setAutoTicket] = useState(true);
+  const [autoTicket, setAutoTicket] = useState(false);
+  const [lastAdded, setLastAdded] = useState<number | null>(null);
+  const cartRef = useRef<HTMLDivElement>(null);
   useEffect(() => { setAutoTicket(readAutoTicket()); }, []);
   const searchRef = useRef<HTMLInputElement>(null);
   const reqId = useRef(0);
@@ -380,8 +422,18 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
       return [...c, { product: p, quantity: 1 }];
     });
     setQ(""); setResults([]);
+    setLastAdded(p.id);
     searchRef.current?.focus();
   };
+
+  // Al agregar un producto, la lista baja hasta ese renglón y lo resalta un momento
+  useEffect(() => {
+    if (lastAdded == null) return;
+    const el = cartRef.current?.querySelector(`[data-pid="${lastAdded}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const t = setTimeout(() => setLastAdded(null), 1200);
+    return () => clearTimeout(t);
+  }, [lastAdded, cart]);
 
   const setQty = (id: number, qty: number) =>
     setCart((c) => c.map((l) => (l.product.id === id ? { ...l, quantity: Math.max(1, Math.min(qty || 1, l.product.stock_quantity)) } : l)));
@@ -407,7 +459,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
     if (c?.customer_type === "wholesale") setPriceList("wholesale");
   };
 
-  const charge = async () => {
+  const charge = async (sendWa = true) => {
     if (!canCharge) return;
     setBusy(true); setMsg(null);
     const payments = [
@@ -426,6 +478,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
       const quien = customer ? ` a ${customer.name}` : "";
       setMsg({ ok: true, text: `Venta #${sale.id}${quien} registrada por ${fmt(sale.total)}${vuelto}`, saleId: sale.id });
       if (autoTicket) printTicket(sale.id);
+      if (sendWa) setShareId(sale.id);   // se abre la ventana para mandar el ticket por WhatsApp
       reset();
       onSold();
     } catch (e: any) {
@@ -440,7 +493,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (document.querySelector(".mo")) return; // hay una ventana abierta
-      if (e.key === "F2" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); charge(); }
+      if (e.key === "F2" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); charge(true); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -528,35 +581,38 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
           </div>
         </div>
 
-        <div style={card} className="pos-cart">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700 }}>Venta actual {cart.length > 0 && <span style={{ color: "#999", fontWeight: 500 }}>({cart.reduce((s, l) => s + l.quantity, 0)} u.)</span>}</h3>
-            {cart.length > 0 && <button onClick={reset} style={btn("gray")}>Vaciar</button>}
+        <div style={{ ...card, padding: 0 }} className="pos-cart">
+          <div className="cart-head">
+            <h3 style={{ fontSize: 15, fontWeight: 700 }}>
+              Venta actual {cart.length > 0 && <span style={{ color: "#999", fontWeight: 500 }}>· {cart.length} {cart.length === 1 ? "producto" : "productos"} · {cart.reduce((s, l) => s + l.quantity, 0)} u.</span>}
+            </h3>
+            {cart.length > 0 && <button onClick={reset} style={{ ...btn("gray"), padding: "6px 12px" }}>Vaciar</button>}
           </div>
           {cart.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#999", padding: "24px 0", textAlign: "center" }}>Buscá un producto para empezar la venta.</p>
-          ) : cart.map((l) => (
-            <div key={l.product.id} className="cart-line">
-              <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600 }}>{l.product.name}</p>
-                <p style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
-                  <b style={{ color: "#344054" }}>{fmt(unitPrice(l.product))}</b> c/u · stock {l.product.stock_quantity}
-                </p>
+            <p style={{ fontSize: 13, color: "#999", padding: "28px 0", textAlign: "center" }}>Buscá un producto para empezar la venta.</p>
+          ) : (
+            <div className="cart-table" ref={cartRef}>
+              <div className="cart-row cart-th">
+                <span>Producto</span><span className="c">Cant.</span><span className="r">P. unit.</span><span className="r">Total</span><span />
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <button onClick={() => setQty(l.product.id, l.quantity - 1)} style={{ ...btn("gray"), padding: "5px 11px" }}>−</button>
-                <input value={l.quantity} onChange={(e) => setQty(l.product.id, parseInt(e.target.value))} inputMode="numeric"
-                  style={{ ...inp, width: 50, textAlign: "center", padding: "6px 4px", fontWeight: 700 }} />
-                <button onClick={() => setQty(l.product.id, l.quantity + 1)} disabled={l.quantity >= l.product.stock_quantity}
-                  style={{ ...btn("gray"), padding: "5px 11px", opacity: l.quantity >= l.product.stock_quantity ? .4 : 1 }}>+</button>
-              </div>
-              <span style={{ width: 120, textAlign: "right", lineHeight: 1.2 }}>
-                {l.quantity > 1 && <span style={{ display: "block", fontSize: 11, color: "#888" }}>{l.quantity} × {fmt(unitPrice(l.product))}</span>}
-                <span style={{ fontWeight: 700, fontSize: 15 }}>{fmt(unitPrice(l.product) * l.quantity)}</span>
-              </span>
-              <button onClick={() => remove(l.product.id)} title="Quitar" style={{ ...btn("red"), padding: "5px 10px" }}>✕</button>
+              {cart.map((l, i) => (
+                <div key={l.product.id} data-pid={l.product.id} className={`cart-row ${lastAdded === l.product.id ? "flash" : ""}`}>
+                  <span className="cart-name" title={l.product.name}>
+                    <b>{i + 1}.</b> {l.product.name}
+                    <small>stock {l.product.stock_quantity}</small>
+                  </span>
+                  <span className="cart-qty">
+                    <button onClick={() => setQty(l.product.id, l.quantity - 1)} disabled={l.quantity <= 1} aria-label="Menos">−</button>
+                    <input value={l.quantity} onChange={(e) => setQty(l.product.id, parseInt(e.target.value))} inputMode="numeric" aria-label="Cantidad" />
+                    <button onClick={() => setQty(l.product.id, l.quantity + 1)} disabled={l.quantity >= l.product.stock_quantity} aria-label="Más">+</button>
+                  </span>
+                  <span className="r cart-unit">{fmt(unitPrice(l.product))}</span>
+                  <span className="r cart-sub">{fmt(unitPrice(l.product) * l.quantity)}</span>
+                  <button className="cart-x" onClick={() => remove(l.product.id)} title="Quitar" aria-label="Quitar">✕</button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -607,16 +663,22 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
           </div>
         )}
 
-        <button onClick={charge} disabled={!canCharge}
-          style={{ ...btn("primary"), width: "100%", padding: 14, fontSize: 16, fontWeight: 800, opacity: canCharge ? 1 : .5 }}>
-          {busy ? "Registrando…" : `Cobrar ${fmt(total)}`}
+        <button onClick={() => charge(true)} disabled={!canCharge}
+          style={{ ...btn("primary"), width: "100%", padding: "12px 14px", fontSize: 16, fontWeight: 800, opacity: canCharge ? 1 : .5,
+                   background: "#16a34a", borderColor: "#16a34a", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <span>{busy ? "Registrando…" : `Cobrar ${fmt(total)}`}</span>
+          {!busy && <span style={{ fontSize: 12, fontWeight: 600, opacity: .9 }}>y enviar ticket por WhatsApp</span>}
         </button>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#444", cursor: "pointer" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => charge(false)} disabled={!canCharge}
+            style={{ border: 0, background: "none", padding: 0, fontSize: 12, color: canCharge ? "#475467" : "#c0c4cc", textDecoration: "underline", cursor: canCharge ? "pointer" : "default", fontFamily: "inherit" }}>
+            Cobrar sin enviar
+          </button>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#667085", cursor: "pointer" }}>
             <input type="checkbox" checked={autoTicket} onChange={(e) => { setAutoTicket(e.target.checked); saveAutoTicket(e.target.checked); }} style={{ accentColor: "#00B4D8" }} />
-            Imprimir ticket
+            Imprimir
           </label>
-          <span style={{ fontSize: 11, color: "#999" }}>Atajo: F2</span>
+          <span style={{ fontSize: 11, color: "#999" }}>F2</span>
         </div>
 
         {msg && (
@@ -634,7 +696,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
                 </button>
               </div>
             )}
-        {shareId && <ShareTicket saleId={shareId} onClose={() => setShareId(null)} />}
+        {shareId && <ShareTicket saleId={shareId} afterSale onClose={() => { setShareId(null); setTimeout(() => searchRef.current?.focus(), 50); }} />}
           </div>
         )}
       </div>
@@ -650,6 +712,9 @@ export function SalesList({ refreshKey, onChange, canVoid }: { refreshKey: numbe
   const [loading, setLoading] = useState(true);
   const [voiding, setVoiding] = useState<Sale | null>(null);
   const [shareId, setShareId] = useState<number | null>(null);
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<"all" | "cash" | "transfer" | "voided">("all");
+  const [open, setOpen] = useState<number | null>(null);
   const [reason, setReason] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -671,36 +736,97 @@ export function SalesList({ refreshKey, onChange, canVoid }: { refreshKey: numbe
 
   const payLabel = (s: Sale) => s.payments.map((p) => `${p.method === "cash" ? "Efectivo" : "Transf."} ${fmt(p.amount)}`).join(" + ") || "—";
 
+  // Resumen del turno (solo ventas vigentes)
+  const ok = sales.filter((x) => x.status === "completed");
+  const sum = {
+    count: ok.length,
+    total: ok.reduce((a, x) => a + x.total, 0),
+    cash: ok.reduce((a, x) => a + x.payments.filter((p) => p.method === "cash").reduce((b, p) => b + p.amount, 0), 0),
+    transfer: ok.reduce((a, x) => a + x.payments.filter((p) => p.method === "transfer").reduce((b, p) => b + p.amount, 0), 0),
+    units: ok.reduce((a, x) => a + x.items.reduce((b, i) => b + i.quantity, 0), 0),
+    voided: sales.length - ok.length,
+  };
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = sales.filter((x) =>
+    (filter === "all" || (filter === "voided" ? x.status === "voided"
+      : x.status === "completed" && x.payments.some((p) => p.method === filter))) &&
+    words.every((w) => `#${x.id} ${x.id} ${x.customer_name || "consumidor final"} ${x.seller_name || ""} ${x.items.map((i) => i.name).join(" ")}`.toLowerCase().includes(w)));
+
   return (
     <div style={card}>
       <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Ventas de esta caja</h3>
-      {!canVoid && <p style={{ fontSize: 12, color: "#888", marginTop: -6, marginBottom: 10 }}>Las ventas se anulan desde Caja (solo el dueño).</p>}
-      {loading ? <p style={{ fontSize: 13, color: "#999" }}>Cargando…</p> : sales.length === 0 ? (
-        <p style={{ fontSize: 13, color: "#999" }}>Todavía no hay ventas en este turno.</p>
-      ) : sales.map((s) => (
-        <div key={s.id} style={{ padding: "12px 0", borderBottom: "1px solid #f3f4f6", opacity: s.status === "voided" ? .55 : 1 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>#{s.id}</span>
-              <span style={{ color: "#888", fontSize: 12, marginLeft: 8 }}>{fmtTime(s.created_at)}</span>
-              {s.customer_name && <span style={{ fontSize: 12, fontWeight: 600, color: "#0891b2", marginLeft: 8 }}>{s.customer_name}</span>}
-              {s.seller_name && <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 8 }}>· vendió {s.seller_name}</span>}
-              {s.price_list === "wholesale" && <span className="pill" style={{ marginLeft: 8, background: "rgba(139,92,246,.12)", color: "#7c3aed" }}>Mayorista</span>}
-              {s.status === "voided" && <span className="pill" style={{ marginLeft: 8, background: "rgba(239,68,68,.12)", color: "#ef4444" }}>Anulada</span>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontWeight: 800, fontSize: 15, textDecoration: s.status === "voided" ? "line-through" : "none" }}>{fmt(s.total)}</span>
-              <button onClick={() => printTicket(s.id)} title="Imprimir ticket" style={{ ...btn("gray"), padding: "5px 10px", fontSize: 12 }}>Ticket</button>
-              <button onClick={() => setShareId(s.id)} title="Enviar ticket por WhatsApp" style={{ ...btn("green"), padding: "5px 10px", fontSize: 12 }}>WhatsApp</button>
-              {canVoid && s.status === "completed" && <button onClick={() => { setVoiding(s); setReason(""); setErr(""); }} style={{ ...btn("red"), padding: "5px 10px", fontSize: 12 }}>Anular</button>}
+
+      {!loading && sales.length > 0 && (
+        <>
+          <div className="sl-sum">
+            <div><span>Ventas</span><b>{sum.count}</b><small>{sum.units} unidades</small></div>
+            <div className="main"><span>Total vendido</span><b>{fmt(sum.total)}</b><small>{sum.count ? `promedio ${fmt(sum.total / sum.count)}` : "—"}</small></div>
+            <div><span>Efectivo</span><b>{fmt(sum.cash)}</b></div>
+            <div><span>Transferencia</span><b>{fmt(sum.transfer)}</b></div>
+            {sum.voided > 0 && <div className="void"><span>Anuladas</span><b>{sum.voided}</b></div>}
+          </div>
+          <div className="sl-tools">
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por N°, cliente o producto…" style={{ ...inp, flex: "1 1 220px" }} />
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {([["all", "Todas"], ["cash", "Efectivo"], ["transfer", "Transferencia"], ...(sum.voided ? [["voided", "Anuladas"]] : [])] as [typeof filter, string][]).map(([k, l]) => (
+                <button key={k} onClick={() => setFilter(k)} style={{ ...seg(filter === k), flex: "0 0 auto", padding: "7px 12px", fontSize: 12 }}>{l}</button>
+              ))}
             </div>
           </div>
-          <p style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{s.items.map((i) => `${i.quantity}× ${i.name}`).join(" · ")}</p>
-          <p style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
-            {payLabel(s)}{s.discount > 0 ? ` · Desc. ${fmt(s.discount)}` : ""}{s.void_reason ? ` · Motivo: ${s.void_reason}` : ""}
-          </p>
+        </>
+      )}
+
+      {loading ? <p style={{ fontSize: 13, color: "#999" }}>Cargando…</p> : sales.length === 0 ? (
+        <p style={{ fontSize: 13, color: "#999" }}>Todavía no hay ventas en este turno.</p>
+      ) : (
+        <div className="sl-table">
+          <div className="sl-row sl-th"><span>N°</span><span>Hora</span><span>Cliente</span><span>Productos</span><span>Pago</span><span className="r">Total</span><span /></div>
+          {shown.length === 0 && <p style={{ fontSize: 13, color: "#999", padding: 16, textAlign: "center" }}>Ninguna venta coincide.</p>}
+          {shown.map((x) => {
+            const units = x.items.reduce((a, i) => a + i.quantity, 0);
+            const isOpen = open === x.id;
+            return (
+              <div key={x.id} className={`sl-item ${x.status === "voided" ? "voided" : ""} ${isOpen ? "open" : ""}`}>
+                <div className="sl-row" onClick={() => setOpen(isOpen ? null : x.id)} role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter") setOpen(isOpen ? null : x.id); }}>
+                  <span className="sl-id">#{x.id}</span>
+                  <span className="sl-muted">{fmtTime(x.created_at)}</span>
+                  <span className="sl-cli">
+                    {x.customer_name || <i>Consumidor final</i>}
+                    {x.price_list === "wholesale" && <em>May.</em>}
+                    {x.status === "voided" && <em className="v">Anulada</em>}
+                  </span>
+                  <span className="sl-prods">{x.items.length === 1 ? `${x.items[0].quantity > 1 ? `${x.items[0].quantity}× ` : ""}${x.items[0].name}` : `${x.items.length} productos · ${units} u.`}</span>
+                  <span className="sl-muted">{x.payments.length > 1 ? "Mixto" : x.payments[0]?.method === "transfer" ? "Transferencia" : "Efectivo"}</span>
+                  <span className="r sl-total">{fmt(x.total)}</span>
+                  <span className="sl-acts" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => setShareId(x.id)} title="Enviar ticket por WhatsApp" className="sl-wa">WhatsApp</button>
+                    <button onClick={() => printTicket(x.id)} title="Imprimir ticket" className="sl-btn">🖨</button>
+                    {canVoid && x.status === "completed" && <button onClick={() => { setVoiding(x); setReason(""); setErr(""); }} title="Anular" className="sl-btn red">Anular</button>}
+                    <span className="sl-chev">{isOpen ? "▴" : "▾"}</span>
+                  </span>
+                </div>
+                {isOpen && (
+                  <div className="sl-detail">
+                    {x.items.map((i, k) => (
+                      <div key={k} className="sl-line">
+                        <span>{i.name}</span>
+                        <span className="sl-muted">{i.quantity} × {fmt(i.unit_price)}</span>
+                        <b>{fmt(i.subtotal)}</b>
+                      </div>
+                    ))}
+                    {x.discount > 0 && <div className="sl-line"><span>Descuento</span><span /><b style={{ color: "#d97706" }}>− {fmt(x.discount)}</b></div>}
+                    <div className="sl-line" style={{ borderTop: "1px dashed #e5e7eb", paddingTop: 6 }}>
+                      <span className="sl-muted">{payLabel(x)}{x.seller_name ? ` · vendió ${x.seller_name}` : ""}{x.void_reason ? ` · Motivo: ${x.void_reason}` : ""}</span>
+                      <span /><b>{fmt(x.total)}</b>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      ))}
+      )}
 
       {shareId && <ShareTicket saleId={shareId} onClose={() => setShareId(null)} />}
       {voiding && (
@@ -897,7 +1023,7 @@ export const POS_CSS = `
     .pos-grid{grid-template-columns:minmax(0,1fr) 330px;height:calc(100vh - var(--adm-top-h, 0px) - 86px);min-height:480px}
     .pos-left{display:flex;flex-direction:column;min-height:0}
     .pos-left > :first-child{flex-shrink:0}
-    .pos-cart{flex:1;min-height:0;overflow-y:auto}
+    .pos-cart{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
     .cart-line{flex-wrap:nowrap}
     .pos-pay{overflow-y:auto;min-height:0}
   }
@@ -907,6 +1033,74 @@ export const POS_CSS = `
     .pos-grid{grid-template-columns:minmax(0,1fr) 300px}
   }
   .side-note{font-size:12px;color:#666;line-height:1.4}
+  /* Ventas del turno */
+  .sl-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px}
+  .sl-sum > div{background:#f8fafc;border:1px solid #eef2f6;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .sl-sum > div.main{background:rgba(0,180,216,.08);border-color:rgba(0,180,216,.25)}
+  .sl-sum > div.void{background:#fef2f2;border-color:#fecaca}
+  .sl-sum span{font-size:11px;font-weight:700;color:#667085;text-transform:uppercase;letter-spacing:.03em}
+  .sl-sum b{font-size:19px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sl-sum small{font-size:11px;color:#98a2b3}
+  .sl-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .sl-table{border:1px solid #eef0f3;border-radius:10px;overflow:hidden}
+  .sl-row{display:grid;grid-template-columns:56px 82px minmax(0,1.4fr) minmax(0,1.4fr) 100px 104px 170px;gap:10px;align-items:center;padding:9px 12px;font-size:13px;cursor:pointer}
+  .sl-th{background:#fafbfc;font-size:11px;font-weight:700;color:#98a2b3;text-transform:uppercase;letter-spacing:.03em;cursor:default;border-bottom:1px solid #eef0f3}
+  .sl-item{border-bottom:1px solid #f3f4f6}
+  .sl-item:last-child{border-bottom:0}
+  .sl-item:hover .sl-row:not(.sl-th){background:#fafcff}
+  .sl-item.open{background:#f8fbff}
+  .sl-item.voided .sl-row{opacity:.55}
+  .sl-item.voided .sl-total{text-decoration:line-through}
+  .sl-row .r{text-align:right}
+  .sl-id{font-weight:800}
+  .sl-muted{color:#888;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sl-cli{font-weight:600;color:#0e7490;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sl-cli i{color:#98a2b3;font-weight:500}
+  .sl-cli em{font-style:normal;font-size:10px;font-weight:800;margin-left:6px;padding:1px 6px;border-radius:5px;background:rgba(139,92,246,.12);color:#7c3aed}
+  .sl-cli em.v{background:rgba(239,68,68,.12);color:#ef4444}
+  .sl-prods{color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sl-total{font-weight:800;font-size:14px;white-space:nowrap}
+  .sl-acts{display:flex;gap:5px;justify-content:flex-end;align-items:center}
+  .sl-acts button{border-radius:7px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid #e5e7eb;background:#fff;color:#344054}
+  .sl-acts .sl-wa{background:#dcfce7;border-color:#86efac;color:#15803d}
+  .sl-acts .red{background:#fef2f2;border-color:#fecaca;color:#dc2626}
+  .sl-chev{color:#98a2b3;font-size:12px;width:12px;text-align:center}
+  .sl-detail{padding:4px 12px 12px 170px;display:grid;gap:4px}
+  .sl-line{display:grid;grid-template-columns:minmax(0,1fr) 140px 104px;gap:10px;font-size:13px}
+  .sl-line b{text-align:right;white-space:nowrap}
+  @media(max-width:900px){
+    .sl-th{display:none}
+    .sl-row{grid-template-columns:auto auto minmax(0,1fr) auto;row-gap:4px}
+    .sl-prods{grid-column:1 / -1;order:5}
+    .sl-row > :nth-child(5){display:none}
+    .sl-acts{grid-column:1 / -1;order:6;justify-content:flex-start}
+    .sl-detail{padding-left:12px}
+    .sl-line{grid-template-columns:minmax(0,1fr) auto auto}
+  }
+  /* Tabla de la venta actual: compacta, para ver muchos productos */
+  .cart-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #eef0f3}
+  .cart-table{overflow-y:auto;min-height:0;flex:1}
+  .cart-row{display:grid;grid-template-columns:minmax(0,1fr) 112px 92px 104px 30px;gap:8px;align-items:center;padding:6px 16px;border-bottom:1px solid #f3f4f6;font-size:13px}
+  .cart-row.flash{background:#ecfeff}
+  .cart-th{position:sticky;top:0;z-index:1;background:#fafbfc;font-size:11px;font-weight:700;color:#98a2b3;text-transform:uppercase;letter-spacing:.03em;padding-top:7px;padding-bottom:7px}
+  .cart-row .r{text-align:right}
+  .cart-row .c{text-align:center}
+  .cart-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:#1a1a1a}
+  .cart-name b{color:#98a2b3;font-weight:600;margin-right:2px}
+  .cart-name small{margin-left:8px;font-size:11px;font-weight:500;color:#aaa}
+  .cart-qty{display:flex;align-items:center;justify-content:center;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;height:30px}
+  .cart-qty button{width:30px;height:100%;border:0;background:#f8f9fb;font-size:15px;cursor:pointer;color:#344054}
+  .cart-qty button:disabled{color:#d0d5dd;cursor:default}
+  .cart-qty input{width:42px;height:100%;border:0;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;text-align:center;font-weight:700;font-size:14px;font-family:inherit}
+  .cart-unit{color:#667085;white-space:nowrap}
+  .cart-sub{font-weight:800;white-space:nowrap}
+  .cart-x{width:28px;height:28px;border:0;border-radius:7px;background:#fef2f2;color:#ef4444;cursor:pointer;font-size:12px}
+  @media(max-width:640px){
+    .cart-row{grid-template-columns:auto minmax(0,1fr) auto 30px;row-gap:5px;padding:8px 12px}
+    .cart-th{display:none}
+    .cart-name{grid-column:1 / -1;white-space:normal}
+    .cart-unit::after{content:" c/u"}
+  }
   .state{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px}
   .state.on{background:rgba(16,185,129,.12);color:#047857}
   .state.off{background:#f2f4f7;color:#667085}

@@ -99,7 +99,7 @@ useEffect(() => {
   };
 
   const sendWhatsApp = () => {
-    const items = cart.map(i => `• ${i.qty}x ${i.name} — ${fmt(i.qty * Number(i.price_wholesale))}`).join("\n");
+    const items = cart.map(i => i.qty>1 ? `• ${i.qty} x ${i.name}\n   ${fmt(Number(i.price_wholesale))} c/u — *${fmt(i.qty*Number(i.price_wholesale))}*` : `• 1 x ${i.name} — *${fmt(Number(i.price_wholesale))}*`).join("\n");
     const total = cart.reduce((s, i) => s + i.qty * Number(i.price_wholesale), 0);
     const msg = encodeURIComponent(
       `📦 *Pedido Mayorista - Concepción Tecnología*\n\n${items}\n\n*Total: ${fmt(total)}*\n\n¡Espero confirmación!`

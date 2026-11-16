@@ -9,6 +9,14 @@
 -- ═══════════════════════════════════════════════════════════════════
 BEGIN;
 
+-- Si falta el paso 1 (o se corrió en otra rama/base de Neon), avisa claro y no hace nada
+DO $$
+BEGIN
+  IF to_regclass('public.import_proveedores') IS NULL THEN
+    RAISE EXCEPTION 'Falta correr primero 07_proveedores_1_preparar.sql en ESTA misma rama/base de Neon';
+  END IF;
+END $$;
+
 INSERT INTO suppliers (name, active, notes)
 SELECT DISTINCT i.proveedor, TRUE, 'Cargado desde los Excel de proveedores'
 FROM import_proveedores i
