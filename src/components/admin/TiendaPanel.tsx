@@ -1,137 +1,44 @@
 "use client";
+// TIENDA PANEL — Artículos (lista + editar/agregar), Sin foto, Pedidos web y Resumen de la tienda.
 import { useState, useEffect, useCallback } from "react";
 import { uploadProductImage } from "@/lib/uploadImage";
+import { toWhatsApp } from "@/lib/phone";
 import { useRouter } from "next/navigation";
 
 const fmt = (n:number) => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(n);
 const fmtDate = (s:string) => new Date(s).toLocaleDateString("es-AR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
 
 const STATUS:Record<string,{label:string;color:string;bg:string}> = {
-  pending:  {label:"Pendiente", color:"#f59e0b",bg:"rgba(245,158,11,.12)"},
-  confirmed:{label:"Confirmado",color:"#3b82f6",bg:"rgba(59,130,246,.12)"},
-  completed:{label:"Completado",color:"#10b981",bg:"rgba(16,185,129,.12)"},
-  cancelled:{label:"Cancelado", color:"#ef4444",bg:"rgba(239,68,68,.12)"},
+  pending:  {label:"Pendiente", color:"#b45309",bg:"#fef3c7"},
+  confirmed:{label:"Confirmado",color:"#1d4ed8",bg:"#dbeafe"},
+  completed:{label:"Completado",color:"#047857",bg:"#d1fae5"},
+  cancelled:{label:"Cancelado", color:"#b91c1c",bg:"#fee2e2"},
 };
 
-const STOCK:Record<string,{color:string;bg:string}> = {
-  alto: {color:"#10b981",bg:"rgba(16,185,129,.15)"},
-  medio:{color:"#f59e0b",bg:"rgba(245,158,11,.15)"},
-  bajo: {color:"#ef4444",bg:"rgba(239,68,68,.15)"},
-};
+// Stock: el nivel se calcula solo a partir de la cantidad
+const qtyOf = (p:any) => Number(p?.stock_quantity ?? 0) || 0;
+const levelOf = (q:number) => q > 10 ? "alto" : q > 3 ? "medio" : "bajo";
+const stockTag = (q:number) =>
+  q <= 0  ? {label:"Sin stock", color:"#b91c1c", bg:"#fee2e2"} :
+  q <= 3  ? {label:"Bajo",      color:"#c2410c", bg:"#ffedd5"} :
+  q <= 10 ? {label:"Medio",     color:"#a16207", bg:"#fef9c3"} :
+            {label:"Alto",      color:"#047857", bg:"#d1fae5"};
 
 export type Tab = "dashboard"|"orders"|"products"|"sinfoto";
 
-// Cada sección de la tienda tiene su propia ruta dentro de /admin
-const TAB_ROUTES:Record<Tab,string> = {
-  dashboard:"/admin/resumen",
-  orders:"/admin/pedidos",
-  products:"/admin/articulos",
-  sinfoto:"/admin/sin-foto",
+type ProdFilter = "all"|"sinstock"|"bajo"|"sinfoto"|"ocultos";
+type OrdFilter  = "all"|"pending"|"confirmed"|"completed"|"cancelled"|"unpaid";
+
+const EMPTY_FORM = {
+  id:null as number|null, name:"", description:"", sku:"", category_id:"", supplier_id:"",
+  cost_price:"", price_retail:"", price_wholesale:"", pct_retail:"", pct_wholesale:"",
+  stock_quantity:"", available:true, featured:false, is_offer:false, is_new:false, image_url:"",
 };
+type Form = typeof EMPTY_FORM;
 
-function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; products:any[]; onAdjust:(ids:number[],pct:number)=>void }) {
-  const [mode, setMode]         = useState<"category"|"supplier"|"product">("category");
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [supId, setSupId]       = useState("");
-  useEffect(()=>{ fetch("/api/crm/suppliers",{credentials:"include"}).then(r=>r.ok?r.json():[]).then(d=>Array.isArray(d)&&setSuppliers(d)).catch(()=>{}); },[]);
-  const [catId, setCatId]       = useState("all");
-  const [search, setSearch]     = useState("");
-  const [selected, setSelected] = useState<number|null>(null);
-  const [pct, setPct]           = useState("");
-  const [loading, setLoading]   = useState(false);
+// Imagen de reemplazo cuando la foto guardada no carga (link roto)
+const NO_IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><rect width="44" height="44" fill="#f3f4f6"/><path d="M14 16h4l2-3h4l2 3h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V18a2 2 0 0 1 2-2z" fill="none" stroke="#c4c8cf" stroke-width="1.6"/><circle cx="22" cy="23" r="3.5" fill="none" stroke="#c4c8cf" stroke-width="1.6"/><path d="M10 34 34 10" stroke="#e5a3a3" stroke-width="1.6"/></svg>');
 
-  const filtered = (products||[]).filter((p:any)=>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  ).slice(0,8);
-
-  const handle = async() => {
-    const n = Number(pct);
-    if (!pct||isNaN(n)||n===0) { alert("Ingresá un porcentaje válido"); return; }
-    let ids: number[] = [];
-    let label = "";
-    if (mode==="category") {
-      ids = catId==="all" ? products.map((p:any)=>p.id) : products.filter((p:any)=>String(p.category_id)===catId).map((p:any)=>p.id);
-      label = catId==="all" ? "todas las categorías" : categories.find((c:any)=>c.id===Number(catId))?.name;
-    } else if (mode==="supplier") {
-      if (!supId) { alert("Elegí un proveedor"); return; }
-      ids = products.filter((p:any)=>String(p.supplier_id)===supId).map((p:any)=>p.id);
-      if (!ids.length) { alert("Ese proveedor no tiene productos asignados"); return; }
-      label = `los ${ids.length} productos de ${suppliers.find((x:any)=>String(x.id)===supId)?.name}`;
-    } else {
-      if (!selected) { alert("Seleccioná un producto"); return; }
-      ids = [selected];
-      label = products.find((p:any)=>p.id===selected)?.name;
-    }
-    if (!confirm(`¿Ajustar precios ${n>0?"+":""}${n}% en ${label}?`)) return;
-    setLoading(true);
-    await onAdjust(ids, n);
-    setPct(""); setSearch(""); setSelected(null);
-    setLoading(false);
-  };
-
-  return (
-    <div style={{padding:"14px 16px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:12,marginBottom:16}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
-        <span style={{fontSize:13,fontWeight:700,color:"#1a1a1a"}}>Ajustar precios por porcentaje</span>
-        <div style={{display:"flex",gap:6}}>
-          {[["category","Por categoría"],["supplier","Por proveedor"],["product","Por producto"]].map(([m,l])=>(
-            <button key={m} onClick={()=>setMode(m as "category"|"supplier"|"product")}
-              style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${mode===m?"rgba(0,180,216,.5)":"#e5e7eb"}`,background:mode===m?"rgba(0,180,216,.12)":"#ffffff",color:mode===m?"#00B4D8":"#666",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
-        {mode==="category" ? (
-          <select value={catId} onChange={e=>setCatId(e.target.value)}
-            style={{padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit",minWidth:200}}>
-            <option value="all">Todas las categorías</option>
-            {categories.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        ) : mode==="supplier" ? (
-          <select value={supId} onChange={e=>setSupId(e.target.value)}
-            style={{padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit",minWidth:220}}>
-            <option value="">Elegí un proveedor…</option>
-            {suppliers.map((x:any)=>{
-              const n = products.filter((p:any)=>p.supplier_id===x.id).length;
-              return <option key={x.id} value={x.id}>{x.name} ({n} {n===1?"producto":"productos"})</option>;
-            })}
-          </select>
-        ) : (
-          <div style={{position:"relative",minWidth:240,flex:"1 1 240px",maxWidth:380}}>
-            <input value={search} onChange={e=>{setSearch(e.target.value);setSelected(null);}}
-              placeholder="Buscar producto..."
-              style={{width:"100%",padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
-            {search&&!selected&&filtered.length>0&&(
-              <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,zIndex:50,maxHeight:200,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,.1)"}}>
-                {filtered.map((p:any)=>(
-                  <div key={p.id} onClick={()=>{setSelected(p.id);setSearch(p.name);}}
-                    style={{padding:"8px 12px",cursor:"pointer",fontSize:13,color:"#1a1a1a",borderBottom:"1px solid #f3f4f6"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background="#f9fafb"}}
-                    onMouseLeave={e=>{e.currentTarget.style.background="#ffffff"}}>
-                    {p.name} - <span style={{color:"#00B4D8"}}>${Number(p.price_retail).toLocaleString("es-AR")}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {selected&&<p style={{fontSize:11,color:"#00B4D8",marginTop:3}}>Producto seleccionado</p>}
-          </div>
-        )}
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <input type="number" value={pct} onChange={e=>setPct(e.target.value)} placeholder="Ej: 10 o -5"
-            style={{width:110,padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
-          <span style={{fontSize:12,color:"#666"}}>%</span>
-        </div>
-        <button onClick={handle} disabled={loading}
-          style={{padding:"8px 16px",borderRadius:7,background:"#00B4D8",border:"none",color:"#ffffff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:loading?.6:1}}>
-          {loading?"Aplicando...":"Aplicar"}
-        </button>
-      </div>
-      <p style={{fontSize:11,color:"#666",marginTop:8}}>Positivo sube el precio, negativo lo baja. Ej: 10 sube 10%, -5 baja 5%.</p>
-    </div>
-  );
-}
 
 export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNew?: boolean }) {
   const router = useRouter();
@@ -139,22 +46,33 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
   const [products, setProducts]     = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [expandedOrder, setExpandedOrder]     = useState<number|null>(null);
-  const [catFilter, setCatFilter]             = useState("all");
-  const [searchProd, setSearchProd]           = useState("");
-  const [editingProduct, setEditingProduct]   = useState<any|null>(null);
-  const [addingProduct, setAddingProduct]     = useState(openNew && tab === "products");
-  const [uploadingId, setUploadingId]         = useState<number|null>(null);
-  const [extraImages, setExtraImages]         = useState<any[]>([]);
-  const [loadingImages, setLoadingImages]     = useState(false);
-  const [importing, setImporting]             = useState(false);
-  const [newProduct, setNewProduct] = useState({
-    name:"", description:"", category_id:"", price_retail:"", price_wholesale:"",
-    stock_level:"alto", stock_quantity:"" as any, available:true, featured:false, is_offer:false, is_new:false, image_url:"",
-    cost_price:"", pct_retail:"", pct_wholesale:"", supplier_id:"",
-  });
+  const [expandedOrder, setExpandedOrder] = useState<number|null>(null);
+  const [ordFilter, setOrdFilter]   = useState<OrdFilter>("all");
+  const [ordSearch, setOrdSearch]   = useState("");
+  const [catFilter, setCatFilter]   = useState("all");
+  const [prodFilter, setProdFilter] = useState<ProdFilter>("all");
+  const [searchProd, setSearchProd] = useState("");
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [form, setForm]             = useState<Form|null>(null);
+  const [saving, setSaving]         = useState(false);
+  const [uploadingId, setUploadingId] = useState<number|null>(null);
+  const [extraImages, setExtraImages] = useState<any[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [importing, setImporting]   = useState(false);
   const [suppliersList, setSuppliersList] = useState<any[]>([]);
+  const [prodPage, setProdPage]     = useState(1);
+  const PRODS_PER_PAGE = 60;
+
   useEffect(()=>{ if(tab==="products") fetch("/api/crm/suppliers",{credentials:"include"}).then(r=>r.ok?r.json():[]).then(d=>Array.isArray(d)&&setSuppliersList(d)).catch(()=>{}); },[tab]);
+
+  // Filtro que viene por la URL (ej: /admin/articulos?f=bajo desde el Resumen)
+  useEffect(()=>{
+    try {
+      const f = new URLSearchParams(window.location.search).get("f");
+      if (f && ["sinstock","bajo","sinfoto","ocultos"].includes(f)) setProdFilter(f as ProdFilter);
+    } catch {}
+  },[]);
+
   // Precio = costo + % de ganancia (redondeado a $10)
   const priceFrom = (cost:string, pct:string) => {
     const c = Number(cost), p = Number(pct);
@@ -166,30 +84,43 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     if (!(c > 0) || !(v > 0)) return "";
     return String(Math.round((v / c - 1) * 1000) / 10);
   };
-  // Recordar los últimos % usados (solo en esta compu)
-  // Atajo F12: artículo nuevo (solo en Artículos y si no hay otra ventana abierta)
+
+  const openNewForm = useCallback(()=>{
+    let r = "", w = "";
+    try { r = localStorage.getItem("ct_pct_retail") || ""; w = localStorage.getItem("ct_pct_wholesale") || ""; } catch {}
+    setExtraImages([]);
+    setForm({ ...EMPTY_FORM, pct_retail:r, pct_wholesale:w });
+  },[]);
+
+  const openEditForm = (p:any) => {
+    const s = (v:any) => v === null || v === undefined ? "" : String(Number(v) || v);
+    const cost = p.cost_price ? String(Number(p.cost_price)) : "";
+    const retail = s(p.price_retail), wholesale = s(p.price_wholesale);
+    setForm({
+      id:p.id, name:p.name||"", description:p.description||"", sku:p.sku||"",
+      category_id: p.category_id ? String(p.category_id) : "", supplier_id: p.supplier_id ? String(p.supplier_id) : "",
+      cost_price:cost, price_retail:retail, price_wholesale:wholesale,
+      pct_retail:pctFrom(cost,retail), pct_wholesale:pctFrom(cost,wholesale),
+      stock_quantity:String(qtyOf(p)), available:!!p.available, featured:!!p.featured, is_offer:!!p.is_offer, is_new:!!p.is_new,
+      image_url:p.image_url||"",
+    });
+    loadExtraImages(p.id);
+  };
+
+  // Abrir "nuevo artículo" si se llegó con F12 desde la pantalla bloqueada
+  useEffect(()=>{ if (openNew && tab==="products") openNewForm(); },[openNew, tab, openNewForm]);
+
+  // Atajos: F12 = artículo nuevo · Esc = cerrar la ventana
   useEffect(()=>{
-    if(tab!=="products") return;
+    if(tab!=="products" && tab!=="sinfoto") return;
     const onKey=(e:KeyboardEvent)=>{
-      if(e.key!=="F12") return;
-      e.preventDefault();
-      if(!editingProduct) setAddingProduct(true);
+      if(e.key==="F12"){ e.preventDefault(); if(!form && tab==="products") openNewForm(); }
+      if(e.key==="Escape" && form) setForm(null);
     };
     window.addEventListener("keydown",onKey);
     return ()=>window.removeEventListener("keydown",onKey);
-  },[tab,editingProduct]);
+  },[tab,form,openNewForm]);
 
-  useEffect(()=>{
-    if(!addingProduct) return;
-    try {
-      const r = localStorage.getItem("ct_pct_retail") || "", w = localStorage.getItem("ct_pct_wholesale") || "";
-      setNewProduct(p=>({...p, pct_retail: p.pct_retail || r, pct_wholesale: p.pct_wholesale || w}));
-    } catch {}
-  },[addingProduct]);
-  const [prodPage, setProdPage] = useState(1);
-  const PRODS_PER_PAGE = 50;
-
-  // Carga inteligente bajo demanda (Lazy fetch por pestaña)
   const fetchOrders = useCallback(async () => {
     try {
       const res = await fetch("/api/orders",{credentials:"include"});
@@ -211,24 +142,15 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     } catch {}
   }, []);
 
-  // Carga inicial optimizada (Solo trae lo indispensable primero)
   useEffect(() => {
     let isMounted = true;
-    Promise.all([fetchOrders(), fetchProducts()]).finally(() => {
-      if (isMounted) setLoading(false);
-    });
+    Promise.all([fetchOrders(), fetchProducts()]).finally(() => { if (isMounted) setLoading(false); });
     return () => { isMounted = false; };
   }, [fetchOrders, fetchProducts]);
 
-  // Carga bajo demanda al cambiar de pestaña
   useEffect(() => {
-    if ((tab === "products" || addingProduct || editingProduct) && categories.length === 0) {
-      fetchCategories();
-    }
-  }, [tab, categories.length, fetchCategories, addingProduct, editingProduct]);
-
-  // Al cambiar de sección, volver arriba
-  const goTab = (t:Tab) => { router.push(TAB_ROUTES[t]); window.scrollTo({top:0}); };
+    if ((tab === "products" || form) && categories.length === 0) fetchCategories();
+  }, [tab, categories.length, fetchCategories, form]);
 
   const patchOrder = async(id:number,data:any)=>{
     const res = await fetch(`/api/orders/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
@@ -244,68 +166,71 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     return true;
   };
 
-  // Foto PRINCIPAL (la que se ve en la lista y en la tienda): sube y guarda en el momento
+  const saveStock = (p:any, raw:string) => {
+    const qty = Math.max(0, Math.floor(Number(raw) || 0));
+    if (qty === qtyOf(p)) return;
+    patchProduct(p.id,{ stock_quantity: qty, stock_level: levelOf(qty), available: qty > 0 });
+  };
+
+  // Foto PRINCIPAL: sube y guarda en el momento
   const setMainPhoto = async(id:number, file:File)=>{
     setUploadingId(id);
     try {
       const url = await uploadProductImage(file);
       if (await patchProduct(id,{image_url:url}))
-        setEditingProduct((ep:any)=>ep&&ep.id===id?{...ep,image_url:url}:ep);
+        setForm(f=>f&&f.id===id?{...f,image_url:url}:f);
     } catch(e:any){ alert(e.message||"No se pudo subir la foto"); }
     finally { setUploadingId(null); }
   };
 
-  const saveEditProduct = async()=>{
-    if(!editingProduct) return;
-    const qty = Number(editingProduct.stock_quantity);
-    const updated = {
-      ...editingProduct,
-      stock_quantity: qty,
-      stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
-      available: qty > 0,
-    };
-    const res = await fetch(`/api/products/${editingProduct.id}`,{method:"PUT",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(updated)});
-    if(!res.ok){ const d=await res.json().catch(()=>({})); alert(d.error||"No se pudo guardar el producto"); return; }
-    setProducts(prev=>prev.map(p=>p.id===editingProduct.id?{...p,...updated}:p));
-    setEditingProduct(null);
+  // Foto del artículo NUEVO (todavía no tiene id): se guarda junto con el resto
+  const uploadNewPhoto = async(file:File)=>{
+    setUploadingId(-1);
+    try { const url = await uploadProductImage(file); setForm(f=>f?{...f,image_url:url}:f); }
+    catch(err:any){ alert(err.message||"No se pudo subir la foto"); }
+    finally { setUploadingId(null); }
   };
 
-  const saveNewProduct = async()=>{
-    if(!newProduct.name||!newProduct.category_id||!newProduct.price_retail||!newProduct.price_wholesale){
-      alert("Completá los campos obligatorios"); return;
-    }
-    const qty = Number(newProduct.stock_quantity)||0;
-    try { localStorage.setItem("ct_pct_retail", newProduct.pct_retail); localStorage.setItem("ct_pct_wholesale", newProduct.pct_wholesale); } catch {}
-    const { pct_retail, pct_wholesale, ...np } = newProduct;
-    const res = await fetch("/api/products",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      ...np,
-      cost_price:     np.cost_price === "" ? null : Number(np.cost_price),
-      supplier_id:    np.supplier_id ? Number(np.supplier_id) : null,
-      category_id:    Number(newProduct.category_id),
-      price_retail:   Number(newProduct.price_retail),
-      price_wholesale:Number(newProduct.price_wholesale),
-      stock_quantity:  qty,
-      stock_level:     qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
-      available:       qty > 0,
-    })});
-    const p = await res.json();
-    if (!res.ok) { alert(p.error || "No se pudo guardar el producto"); return; }
-    const cat = categories.find((c:any)=>c.id===Number(newProduct.category_id));
-    setProducts(prev=>[...prev,{
-      ...p,
-      category_name:   cat?.name||"",
-      stock_quantity:  qty,
-      stock_level:     qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
-      available:       qty > 0,
-    }]);
-    setAddingProduct(false);
-    setNewProduct({name:"",description:"",category_id:"",price_retail:"",price_wholesale:"",stock_level:"alto",stock_quantity:"" as any,available:true,featured:false,is_offer:false,is_new:false,image_url:"",cost_price:"",pct_retail:"",pct_wholesale:"",supplier_id:""});
+  const saveForm = async()=>{
+    if(!form || saving) return;
+    if(!form.name.trim()) return alert("Falta el nombre del artículo");
+    if(!form.category_id) return alert("Elegí una categoría");
+    if(!(Number(form.price_retail) > 0) || !(Number(form.price_wholesale) > 0)) return alert("Completá el precio minorista y el mayorista");
+    const qty = Math.max(0, Math.floor(Number(form.stock_quantity) || 0));
+    const payload = {
+      name: form.name.trim(), description: form.description, sku: form.sku.trim(),
+      category_id: Number(form.category_id), supplier_id: form.supplier_id ? Number(form.supplier_id) : null,
+      cost_price: Number(form.cost_price) > 0 ? Number(form.cost_price) : null,
+      price_retail: Number(form.price_retail), price_wholesale: Number(form.price_wholesale),
+      stock_quantity: qty, stock_level: levelOf(qty),
+      available: qty > 0 ? form.available : false,
+      featured: form.featured, is_offer: form.is_offer, is_new: form.is_new, image_url: form.image_url,
+    };
+    const cat = categories.find((c:any)=>c.id===payload.category_id);
+    setSaving(true);
+    try {
+      if (form.id) {
+        const res = await fetch(`/api/products/${form.id}`,{method:"PUT",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+        const d = await res.json().catch(()=>({}));
+        if(!res.ok){ alert(d.error||"No se pudo guardar el artículo"); return; }
+        setProducts(prev=>prev.map(p=>p.id===form.id?{...p,...payload,category_name:cat?.name||p.category_name}:p));
+      } else {
+        try { localStorage.setItem("ct_pct_retail", form.pct_retail); localStorage.setItem("ct_pct_wholesale", form.pct_wholesale); } catch {}
+        const res = await fetch("/api/products",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+        const p = await res.json().catch(()=>({}));
+        if(!res.ok){ alert(p.error||"No se pudo guardar el artículo"); return; }
+        setProducts(prev=>[...prev,{...p,...payload,id:p.id,category_name:cat?.name||""}]);
+      }
+      setForm(null);
+    } finally { setSaving(false); }
   };
 
   const deleteProduct = async(id:number)=>{
-    if(!confirm("¿Eliminar este producto?")) return;
-    await fetch(`/api/products/${id}`,{method:"DELETE",credentials:"include"});
+    if(!confirm("¿Eliminar este artículo? No se puede deshacer.")) return false;
+    const res = await fetch(`/api/products/${id}`,{method:"DELETE",credentials:"include"});
+    if(!res.ok){ alert("No se pudo eliminar (puede tener ventas asociadas). Podés ocultarlo de la tienda."); return false; }
     setProducts(prev=>prev.filter(p=>p.id!==id));
+    return true;
   };
 
   const loadExtraImages = async(productId:number)=>{
@@ -317,7 +242,6 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
   };
 
   const uploadExtraPhoto = async(productId:number, file:File)=>{
-    // Si el producto todavía no tiene foto principal, esta pasa a ser la principal
     const current = products.find((p:any)=>p.id===productId);
     if (current && !current.image_url) return setMainPhoto(productId, file);
     setLoadingImages(true);
@@ -529,369 +453,346 @@ ${lines}
     URL.revokeObjectURL(a.href);
   };
 
+
   const sendFactWsp = (o:any) => {
     const lines = o.items?.map((i:any)=>`- ${i.qty}x ${i.name}: ${fmt(i.qty*i.price)}`).join("\n")||"";
     const msg = encodeURIComponent(`*Factura Concepción Tecnología*\n\nCliente: ${o.customer_name}\nEntrega: ${o.delivery_type==="pickup"?"Retira en local":`Envío a: ${o.address}`}\n\n${lines}\n\n*Total: ${fmt(Number(o.total))}*\nEstado: ${STATUS[o.status]?.label}`);
-    window.open(`https://wa.me/549${o.phone}?text=${msg}`,"_blank");
+    const num = toWhatsApp(String(o.phone||""));
+    window.open(num ? `https://wa.me/${num}?text=${msg}` : `https://wa.me/?text=${msg}`,"_blank");
   };
 
-  const totalPaid   = orders.filter(o=>o.paid).reduce((s,o)=>s+Number(o.total),0);
+  // ── Números ─────────────────────────────────────────────
+  const totalPaid    = orders.filter(o=>o.paid).reduce((s,o)=>s+Number(o.total),0);
   const totalPending = orders.filter(o=>!o.paid&&o.status!=="cancelled").reduce((s,o)=>s+Number(o.total),0);
   const pendingCount = orders.filter(o=>o.status==="pending").length;
-  const lowStock     = products.filter((p:any)=>p.stock_level==="bajo");
-  const sinFotoCount = products.filter((p:any)=>!p.image_url).length;
-  const uniqueCats   = [...new Set(products.map((p:any)=>p.category_name))];
+  const lowStock     = products.filter((p:any)=>qtyOf(p)<=3).sort((a,b)=>qtyOf(a)-qtyOf(b));
+  const sinFoto      = products.filter((p:any)=>!p.image_url);
+  const supName = (id:any) => suppliersList.find((s:any)=>s.id===Number(id))?.name || "";
+  const catNames = [...new Set(products.map((p:any)=>p.category_name).filter(Boolean))].sort() as string[];
+
+  const PROD_FILTERS: [ProdFilter,string,(p:any)=>boolean][] = [
+    ["all","Todos",()=>true],
+    ["sinstock","Sin stock",p=>qtyOf(p)===0],
+    ["bajo","Stock bajo (1 a 3)",p=>qtyOf(p)>0&&qtyOf(p)<=3],
+    ["sinfoto","Sin foto",p=>!p.image_url],
+    ["ocultos","Ocultos en la web",p=>!p.available],
+  ];
+  const pfTest = PROD_FILTERS.find(f=>f[0]===prodFilter)![2];
+  const q = searchProd.trim().toLowerCase();
   const filteredProds = products
     .filter((p:any)=>catFilter==="all"||p.category_name===catFilter)
-    .filter((p:any)=>!searchProd||p.name.toLowerCase().includes(searchProd.toLowerCase()));
-
+    .filter(pfTest)
+    .filter((p:any)=>!q || p.name.toLowerCase().includes(q) || String(p.sku||"").toLowerCase().includes(q))
+    .sort((a:any,b:any)=>a.name.localeCompare(b.name,"es"));
   const filteredProdsPaged = filteredProds.slice(0, prodPage * PRODS_PER_PAGE);
   const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
 
+  const ORD_FILTERS: [OrdFilter,string,(o:any)=>boolean][] = [
+    ["all","Todos",()=>true],
+    ["pending","Pendientes",o=>o.status==="pending"],
+    ["confirmed","Confirmados",o=>o.status==="confirmed"],
+    ["unpaid","Sin pagar",o=>!o.paid&&o.status!=="cancelled"],
+    ["completed","Completados",o=>o.status==="completed"],
+    ["cancelled","Cancelados",o=>o.status==="cancelled"],
+  ];
+  const oq = ordSearch.trim().toLowerCase();
+  const ordersShown = orders
+    .filter(ORD_FILTERS.find(f=>f[0]===ordFilter)![2])
+    .filter((o:any)=>!oq || String(o.customer_name||"").toLowerCase().includes(oq) || String(o.phone||"").includes(oq) || String(o.id)===oq.replace("#",""));
 
-  const card = {background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:13,padding:"16px 18px"};
-  const btn = (v:string) => {
-    const base = {padding:"7px 12px",borderRadius:7,fontSize:12,fontWeight:600 as const,cursor:"pointer" as const,fontFamily:"inherit"};
-    if (v==="cyan")  return {...base,background:"rgba(0,180,216,.1)",  color:"#0891b2",border:"1px solid rgba(0,180,216,.3)"};
-    if (v==="red")   return {...base,background:"rgba(239,68,68,.1)",  color:"#ef4444",border:"1px solid rgba(239,68,68,.3)"};
-    if (v==="green") return {...base,background:"rgba(16,185,129,.1)", color:"#059669",border:"1px solid rgba(16,185,129,.3)"};
-    if (v==="amber") return {...base,background:"rgba(245,158,11,.1)", color:"#d97706",border:"1px solid rgba(245,158,11,.3)"};
-    return {...base,background:"#f3f4f6",color:"#444",border:"1px solid #e5e7eb"};
+  if(loading) return <p style={{color:"#666",padding:20}}>Cargando...</p>;
+
+  const Pill = ({c,bg,children}:{c:string;bg:string;children:any}) => <span className="tp-pill" style={{color:c,background:bg}}>{children}</span>;
+  const PaidPill = ({o}:{o:any}) => o.paid ? <Pill c="#047857" bg="#d1fae5">Pagado</Pill> : <Pill c="#b45309" bg="#fef3c7">Sin pagar</Pill>;
+  const Thumb = ({p,size=44}:{p:any;size?:number}) => p.image_url
+    ? <img src={p.image_url} alt="" className="tp-img" style={{width:size,height:size}} onError={e=>{const el=e.currentTarget as HTMLImageElement; el.onerror=null; el.src=NO_IMG;}}/>
+    : <span className="tp-noimg" style={{width:size,height:size}}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </span>;
+
+  // ── Formulario: campo de precio con % de ganancia ───────
+  const setF = (patch:Partial<Form>) => setForm(f=>f?{...f,...patch}:f);
+  const marginTxt = (price:string) => {
+    const c = Number(form?.cost_price), v = Number(price);
+    if (!(c>0) || !(v>0)) return "";
+    return `Ganás ${fmt(v-c)}`;
   };
-  const inp = {width:"100%",padding:"10px 12px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,color:"#1a1a1a",fontSize:13,fontFamily:"inherit",outline:"none"};
-  const pageTitle = {fontSize:22,fontWeight:700,color:"#1a1a1a"};
-
-  if(loading) return <p style={{color:"#666",padding:20,fontFamily:"inherit"}}>Cargando...</p>;
 
   return (
     <div className="tienda">
-      <style dangerouslySetInnerHTML={{ __html: `
-        .pill{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:600}
-        select{padding:6px 9px;background:#ffffff;border:1px solid #e5e7eb;border-radius:7px;color:#1a1a1a;font-size:12px;outline:none;cursor:pointer;font-family:inherit}
-        select option{background:#ffffff;color:#1a1a1a}
-        button,label{transition:background .15s,border-color .15s,opacity .15s}
-        button:hover:not(:disabled){filter:brightness(.97)}
-        .mo{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;padding:0}
-        @media(min-width:640px){.mo{align-items:center;padding:16px}}
-        .mb{background:#ffffff;border:1px solid #e5e7eb;border-radius:20px 20px 0 0;padding:24px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto}
-        @media(min-width:640px){.mb{border-radius:18px}}
-        .toggle{width:34px;height:19px;border-radius:10px;border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
-        .thumb{position:absolute;width:13px;height:13px;background:white;border-radius:50%;top:3px;transition:left .2s}
-
-
-        .admin-content{min-width:0;overflow-x:clip}
-        .admin-inner{max-width:1180px;margin:0 auto}
-
-        .kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
-        .kpi-value{font-size:clamp(18px,4.6vw,24px);font-weight:700}
-        .dash-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
-        .prod-actions{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;flex:1 1 100%;padding-top:10px;border-top:1px solid #f3f4f6}
-        .prod-actions .toggle{margin-right:4px}
-        .act-btn{flex:1 1 0;text-align:center;display:flex;align-items:center;justify-content:center;min-height:36px;white-space:nowrap}
-        .page-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
-
-        @media(min-width:768px){
-          .kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
-          .prod-actions{flex:0 0 auto;flex-wrap:nowrap;padding-top:0;border-top:none}
-          .act-btn{flex:0 0 auto}
-        }
-        @media(min-width:1100px){
-          .dash-grid{grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px;align-items:start}
-        }
-      ` }} />
-
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <main className="admin-content">
         <div className="admin-inner">
 
-        {/* DASHBOARD */}
+        {/* ═════════ RESUMEN DE LA TIENDA ═════════ */}
         {tab==="dashboard"&&(
           <div>
-            <div className="page-head">
+            <div className="tp-head">
               <div>
-                <h2 style={pageTitle}>Dashboard</h2>
-                <p style={{color:"#666",fontSize:13}}>Resumen general de pedidos y stock</p>
+                <h2 className="tp-title">Resumen de la tienda</h2>
+                <p className="tp-sub">Pedidos de la web y artículos que necesitan atención</p>
               </div>
             </div>
-            <div className="kpi-grid">
-              {[
-                {label:"Cobrado",       value:fmt(totalPaid),    color:"#059669"},
-                {label:"Por cobrar",    value:fmt(totalPending), color:"#d97706"},
-                {label:"Sin confirmar", value:pendingCount,      color:"#2563eb"},
-                {label:"Total pedidos", value:orders.length,     color:"#1a1a1a"},
-              ].map((m,i)=>(
-                <div key={i} style={card}>
-                  <p style={{fontSize:11,color:"#666",fontWeight:600,letterSpacing:".04em",marginBottom:8}}>{m.label.toUpperCase()}</p>
-                  <p className="kpi-value" style={{color:m.color}}>{m.value}</p>
-                </div>
-              ))}
+            <div className="tp-kpis">
+              <div className="tp-kpi"><span>Cobrado</span><b style={{color:"#047857"}}>{fmt(totalPaid)}</b><small>pedidos marcados como pagados</small></div>
+              <div className="tp-kpi"><span>Por cobrar</span><b style={{color:"#b45309"}}>{fmt(totalPending)}</b><small>{orders.filter(o=>!o.paid&&o.status!=="cancelled").length} pedidos sin pagar</small></div>
+              <button className="tp-kpi link" onClick={()=>{router.push("/admin/pedidos");}}><span>Pedidos sin confirmar</span><b style={{color:"#1d4ed8"}}>{pendingCount}</b><small>de {orders.length} pedidos en total →</small></button>
+              <button className="tp-kpi link" onClick={()=>router.push("/admin/articulos?f=sinstock")}><span>Sin stock</span><b style={{color:"#b91c1c"}}>{products.filter(p=>qtyOf(p)===0).length}</b><small>{sinFoto.length} artículos sin foto</small></button>
             </div>
 
-            <div className="dash-grid">
-              <div style={card}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:13}}>
-                  <h3 style={{fontSize:15,fontWeight:700,color:"#1a1a1a"}}>Últimos pedidos</h3>
-                  <button style={btn("cyan")} onClick={()=>goTab("orders")}>Ver todos</button>
+            <div className="tp-dash">
+              <section className="tp-card">
+                <div className="tp-card-h">
+                  <h3>Últimos pedidos</h3>
+                  <button className="tp-btn sm" onClick={()=>router.push("/admin/pedidos")}>Ver todos</button>
                 </div>
-                {orders.length===0&&<p style={{color:"#666",fontSize:13}}>No hay pedidos todavía.</p>}
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {orders.slice(0,5).map((o:any)=>(
-                    <div key={o.id} style={{padding:"12px 14px",background:"#f9fafb",borderRadius:10,border:"1px solid #e5e7eb"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}>
-                        <p style={{fontWeight:600,color:"#1a1a1a",fontSize:14}}>{o.customer_name}</p>
-                        <p style={{color:"#0891b2",fontWeight:700,fontSize:15}}>{fmt(Number(o.total))}</p>
-                      </div>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10,alignItems:"center"}}>
-                        <span className="pill" style={{background:STATUS[o.status]?.bg,color:STATUS[o.status]?.color}}>{STATUS[o.status]?.label}</span>
-                        <span className="pill" style={{background:o.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:o.paid?"#059669":"#d97706"}}>{o.paid?"Pagado":"Sin pagar"}</span>
-                        <span style={{fontSize:12,color:"#666"}}>{fmtDate(o.created_at)}</span>
-                      </div>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                        <button style={btn(o.status==="completed"?"green":"cyan")} onClick={()=>patchOrder(o.id,{status:"completed"})}>Marcar completado</button>
-                        <button style={btn(o.paid?"amber":"green")} onClick={()=>patchOrder(o.id,{paid:!o.paid})}>{o.paid?"Marcar sin pagar":"Marcar pagado"}</button>
-                        <button style={btn("default")} onClick={()=>downloadFact(o)}>Descargar factura</button>
-                        <button style={btn("default")} onClick={()=>sendFactWsp(o)}>Enviar por WhatsApp</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                {orders.length===0&&<p className="tp-empty">Todavía no hay pedidos.</p>}
+                {orders.slice(0,6).map((o:any)=>(
+                  <button key={o.id} className="tp-mini" onClick={()=>router.push("/admin/pedidos")}>
+                    <span className="tp-mini-main">
+                      <b>{o.customer_name}</b>
+                      <small>#{o.id} · {fmtDate(o.created_at)} · {o.items?.length||0} {(o.items?.length||0)===1?"producto":"productos"}</small>
+                    </span>
+                    <span className="tp-mini-tags">
+                      <Pill c={STATUS[o.status]?.color} bg={STATUS[o.status]?.bg}>{STATUS[o.status]?.label}</Pill>
+                      <PaidPill o={o}/>
+                    </span>
+                    <b className="tp-mini-total">{fmt(Number(o.total))}</b>
+                  </button>
+                ))}
+              </section>
 
-              <div style={card}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                  <h3 style={{fontSize:15,fontWeight:700,color:"#1a1a1a"}}>Stock bajo</h3>
-                  <span style={{fontSize:13,fontWeight:700,color:lowStock.length>0?"#ef4444":"#666"}}>{lowStock.length}</span>
+              <section className="tp-card">
+                <div className="tp-card-h">
+                  <h3>Stock bajo <span className="tp-count red">{lowStock.length}</span></h3>
+                  <button className="tp-btn sm" onClick={()=>router.push("/admin/articulos?f=bajo")}>Ver en Artículos</button>
                 </div>
-                {lowStock.length===0&&<p style={{color:"#666",fontSize:13}}>No hay productos con stock bajo.</p>}
-                {lowStock.map((p:any)=>(
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",background:"rgba(239,68,68,.05)",border:"1px solid rgba(239,68,68,.15)",borderRadius:8,marginBottom:7}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:13,fontWeight:500,color:"#1a1a1a",wordBreak:"break-word"}}>{p.name}</p>
-                      <p style={{fontSize:11,color:"#666"}}>{p.category_name}</p>
-                    </div>
-                    <span style={{color:"#ef4444",fontWeight:700,fontSize:12,padding:"2px 8px",background:"rgba(239,68,68,.12)",borderRadius:6,whiteSpace:"nowrap"}}>{p.stock_quantity??0} u.</span>
+                {lowStock.length===0&&<p className="tp-empty">No hay artículos con stock bajo.</p>}
+                {lowStock.slice(0,8).map((p:any)=>{ const t=stockTag(qtyOf(p)); return (
+                  <div key={p.id} className="tp-low">
+                    <span className="tp-low-name"><b>{p.name}</b><small>{p.category_name}</small></span>
+                    <Pill c={t.color} bg={t.bg}>{qtyOf(p)} u.</Pill>
                   </div>
+                );})}
+                {lowStock.length>8&&<p className="tp-more">y {lowStock.length-8} más…</p>}
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* ═════════ PEDIDOS WEB ═════════ */}
+        {tab==="orders"&&(
+          <div>
+            <div className="tp-head">
+              <div>
+                <h2 className="tp-title">Pedidos web</h2>
+                <p className="tp-sub">{orders.length} pedidos · {pendingCount} sin confirmar · {fmt(totalPending)} por cobrar</p>
+              </div>
+              <button className="tp-btn" onClick={fetchOrders}>↻ Actualizar</button>
+            </div>
+
+            <div className="tp-filters">
+              <input className="tp-search" value={ordSearch} onChange={e=>setOrdSearch(e.target.value)} placeholder="Buscar por cliente, teléfono o #pedido…"/>
+              <div className="tp-chips">
+                {ORD_FILTERS.map(([k,l,t])=>(
+                  <button key={k} className={`tp-chip${ordFilter===k?" on":""}`} onClick={()=>setOrdFilter(k)}>
+                    {l} <em>{orders.filter(t).length}</em>
+                  </button>
                 ))}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* PEDIDOS */}
-        {tab==="orders"&&(
-          <div>
-            <div className="page-head">
-              <div>
-                <h2 style={pageTitle}>Pedidos</h2>
-                <p style={{color:"#666",fontSize:13}}>{orders.length} pedidos en total, {pendingCount} pendientes</p>
+            <div className="tp-card flush">
+              <div className="tp-orow tp-ohead">
+                <span>Pedido</span><span>Cliente</span><span>Entrega</span><span className="r">Total</span><span>Estado</span><span/>
               </div>
-              <button onClick={fetchOrders} style={btn("cyan")}>Actualizar</button>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:9}}>
-              {orders.length===0&&<p style={{color:"#666",fontSize:14}}>No hay pedidos aún.</p>}
-              {orders.map((order:any)=>(
-                <div key={order.id} style={card}>
-                  <div style={{cursor:"pointer"}} onClick={()=>setExpandedOrder(expandedOrder===order.id?null:order.id)}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,gap:10}}>
-                      <div>
-                        <p style={{fontWeight:600,fontSize:15,color:"#1a1a1a",marginBottom:4}}>{order.customer_name}</p>
-                        <p style={{fontSize:13,color:"#666"}}>Tel: {order.phone}</p>
-                        <p style={{fontSize:12,color:"#666"}}>{order.delivery_type==="pickup"?"Retira en local":"Envío"} · {order.sale_type==="retail"?"Minorista":"Mayorista"}</p>
-                      </div>
-                      <div style={{textAlign:"right"}}>
-                        <p style={{fontSize:19,fontWeight:700,color:"#0891b2"}}>{fmt(Number(order.total))}</p>
-                        <p style={{fontSize:11,color:"#666"}}>{fmtDate(order.created_at)}</p>
-                      </div>
-                    </div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                      <span className="pill" style={{background:STATUS[order.status]?.bg,color:STATUS[order.status]?.color}}>{STATUS[order.status]?.label}</span>
-                      <span className="pill" style={{background:order.paid?"rgba(16,185,129,.12)":"rgba(245,158,11,.12)",color:order.paid?"#059669":"#d97706"}}>{order.paid?"Pagado":"Sin pagar"}</span>
-                      <span style={{fontSize:11,color:"#999",marginLeft:"auto"}}>{expandedOrder===order.id?"Ocultar detalle":"Ver detalle"}</span>
-                    </div>
-                  </div>
-                  {expandedOrder===order.id&&(
-                    <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #e5e7eb"}} onClick={e=>e.stopPropagation()}>
-                      {order.items?.map((item:any,i:number)=>(
-                        <div key={i} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"6px 0",borderBottom:"1px solid #f3f4f6",fontSize:13}}>
-                          <span style={{color:"#1a1a1a"}}>{item.qty}x {item.name}</span>
-                          <span style={{color:"#0891b2",fontWeight:600,whiteSpace:"nowrap"}}>{fmt(item.qty*item.price)}</span>
-                        </div>
-                      ))}
-                      {order.address&&<p style={{fontSize:13,color:"#666",marginTop:9}}>Dirección: {order.address}</p>}
-                      <div style={{marginTop:12}}>
-                        <p style={{fontSize:11,color:"#666",fontWeight:600,marginBottom:8}}>CAMBIAR ESTADO</p>
-                        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-                          {["pending","confirmed","completed","cancelled"].map(s=>(
-                            <button key={s} style={{...btn(s==="completed"?"green":s==="cancelled"?"red":s==="confirmed"?"cyan":"amber"),opacity:order.status===s?1:.5}}
-                              onClick={()=>patchOrder(order.id,{status:s})}>
-                              {STATUS[s].label}
-                            </button>
+              {ordersShown.length===0&&<p className="tp-empty pad">No hay pedidos con ese filtro.</p>}
+              {ordersShown.map((o:any)=>{
+                const open = expandedOrder===o.id;
+                return (
+                  <div key={o.id} className={`tp-oitem${open?" open":""}`}>
+                    <button className="tp-orow" onClick={()=>setExpandedOrder(open?null:o.id)}>
+                      <span className="tp-oid"><b>#{o.id}</b><small>{fmtDate(o.created_at)}</small></span>
+                      <span className="tp-ocli"><b>{o.customer_name}</b><small>{o.phone}</small></span>
+                      <span className="tp-odel">{o.delivery_type==="pickup"?"Retira en local":"Envío"}<small>{o.sale_type==="retail"?"Minorista":"Mayorista"} · {o.items?.length||0} prod.</small></span>
+                      <b className="tp-ototal r">{fmt(Number(o.total))}</b>
+                      <span className="tp-otags"><Pill c={STATUS[o.status]?.color} bg={STATUS[o.status]?.bg}>{STATUS[o.status]?.label}</Pill><PaidPill o={o}/></span>
+                      <span className="tp-chev">{open?"▴":"▾"}</span>
+                    </button>
+                    {open&&(
+                      <div className="tp-odetail">
+                        <div className="tp-oitems">
+                          <div className="tp-oline head"><span>Cant.</span><span>Producto</span><span className="r">P. unit.</span><span className="r">Subtotal</span></div>
+                          {o.items?.map((it:any,i:number)=>(
+                            <div key={i} className="tp-oline">
+                              <b>{Number(it.qty)||0}</b><span>{it.name||"Artículo"}</span><span className="r">{fmt(Number(it.price)||0)}</span><b className="r">{fmt((Number(it.qty)||0)*(Number(it.price)||0))}</b>
+                            </div>
                           ))}
+                          <div className="tp-oline total"><span/><span>Total</span><span/><b className="r">{fmt(Number(o.total))}</b></div>
+                          {o.address&&<p className="tp-oaddr">📍 Envío a: {o.address}</p>}
                         </div>
-                        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                          <button style={btn(order.paid?"amber":"green")} onClick={()=>patchOrder(order.id,{paid:!order.paid})}>
-                            {order.paid?"Marcar sin pagar":"Marcar pagado"}
-                          </button>
-                          <button style={btn("default")} onClick={()=>downloadFact(order)}>Descargar factura</button>
-                          <button style={btn("default")} onClick={()=>sendFactWsp(order)}>Enviar por WhatsApp</button>
+                        <div className="tp-oside">
+                          <div>
+                            <p className="tp-lbl">Estado del pedido</p>
+                            <div className="tp-seg">
+                              {["pending","confirmed","completed","cancelled"].map(s=>(
+                                <button key={s} className={o.status===s?"on":""} style={o.status===s?{background:STATUS[s].bg,color:STATUS[s].color,borderColor:STATUS[s].color+"55"}:undefined}
+                                  onClick={()=>patchOrder(o.id,{status:s})}>{STATUS[s].label}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="tp-lbl">Pago</p>
+                            <button className={`tp-btn ${o.paid?"":"green"}`} style={{width:"100%"}} onClick={()=>patchOrder(o.id,{paid:!o.paid})}>
+                              {o.paid?"Pagado ✓ · marcar sin pagar":"Marcar como pagado"}
+                            </button>
+                          </div>
+                          <div className="tp-oacts">
+                            <button className="tp-btn wa" onClick={()=>sendFactWsp(o)}>Enviar por WhatsApp</button>
+                            <button className="tp-btn" onClick={()=>downloadFact(o)}>Descargar comprobante</button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* PRODUCTOS */}
+        {/* ═════════ ARTÍCULOS ═════════ */}
         {tab==="products"&&(
           <div>
-            <PriceAdjuster
-              categories={categories}
-              products={products}
-              onAdjust={async(ids,pct)=>{
-                // De a 8 productos a la vez (con cientos de productos es mucho más rápido)
-                for (let i = 0; i < ids.length; i += 8) {
-                  await Promise.all(ids.slice(i, i + 8).map(async(id)=>{
-                    const p = products.find((p:any)=>p.id===id);
-                    if(!p) return;
-                    const newRetail   = Math.round(Number(p.price_retail)   * (1+pct/100));
-                    const newWholesale = Math.round(Number(p.price_wholesale) * (1+pct/100));
-                    await fetch(`/api/products/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({price_retail:newRetail,price_wholesale:newWholesale})});
-                  }));
-                }
-                await fetchProducts();
-                alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
-              }}
-            />
-            <div className="page-head">
+            <div className="tp-head">
               <div>
-                <h2 style={pageTitle}>Productos</h2>
-                <p style={{color:"#666",fontSize:13}}>{products.length} productos, {products.filter((p:any)=>p.available).length} disponibles</p>
+                <h2 className="tp-title">Artículos</h2>
+                <p className="tp-sub">{products.length} artículos · {products.filter((p:any)=>p.available).length} visibles en la web · {products.filter(p=>qtyOf(p)===0).length} sin stock</p>
               </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button style={{...btn("default"),padding:"9px 16px",fontSize:13}} onClick={exportExcel}>Exportar</button>
-                <label style={{...btn("cyan"),padding:"9px 16px",fontSize:13,cursor:importing?"default":"pointer",display:"flex",alignItems:"center"}}>
+              <div className="tp-actions">
+                <button className={`tp-btn${showAdjust?" on":""}`} onClick={()=>setShowAdjust(v=>!v)}>% Ajustar precios</button>
+                <button className="tp-btn" onClick={exportExcel}>Exportar</button>
+                <label className="tp-btn" style={{cursor:importing?"default":"pointer"}}>
                   {importing?"Importando...":"Importar"}
-                  <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
-                    onChange={e=>{const f=e.target.files?.[0]; if(f) importExcel(f); e.target.value="";}}
-                    disabled={importing}/>
+                  <input type="file" accept=".xlsx,.xls" style={{display:"none"}} disabled={importing}
+                    onChange={e=>{const f=e.target.files?.[0]; if(f) importExcel(f); e.target.value="";}}/>
                 </label>
-                <button style={{...btn("green"),padding:"9px 16px",fontSize:13}} onClick={()=>setAddingProduct(true)} title="Atajo: F12">Agregar producto <span style={{opacity:.75,fontWeight:500,fontSize:11}}>F12</span></button>
+                <button className="tp-btn primary" onClick={openNewForm} title="Atajo: F12">+ Nuevo artículo <kbd>F12</kbd></button>
               </div>
             </div>
 
-            <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-              <input value={searchProd} onChange={e=>{setSearchProd(e.target.value); setProdPage(1);}} placeholder="Buscar producto por nombre..."
-                style={{flex:1,minWidth:180,maxWidth:480,padding:"10px 12px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,fontSize:13,outline:"none",fontFamily:"inherit",color:"#1a1a1a"}}/>
-            </div>
-            <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:6}}>
-              {["all",...uniqueCats].map(c=>(
-                <button key={c as string} onClick={()=>{setCatFilter(c as string); setProdPage(1);}}
-                  style={{padding:"6px 13px",borderRadius:7,border:`1px solid ${catFilter===c?"rgba(0,180,216,.4)":"#e5e7eb"}`,background:catFilter===c?"rgba(0,180,216,.1)":"#ffffff",color:catFilter===c?"#0891b2":"#444",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>
-                  {c==="all"?"Todos":c as string}
-                </button>
-              ))}
+            {showAdjust&&(
+              <PriceAdjuster
+                categories={categories}
+                products={products}
+                onAdjust={async(ids,pct)=>{
+                  for (let i = 0; i < ids.length; i += 8) {
+                    await Promise.all(ids.slice(i, i + 8).map(async(id)=>{
+                      const p = products.find((p:any)=>p.id===id);
+                      if(!p) return;
+                      const newRetail    = Math.round(Number(p.price_retail)    * (1+pct/100));
+                      const newWholesale = Math.round(Number(p.price_wholesale) * (1+pct/100));
+                      await fetch(`/api/products/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({price_retail:newRetail,price_wholesale:newWholesale})});
+                    }));
+                  }
+                  await fetchProducts();
+                  alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
+                }}
+              />
+            )}
+
+            <div className="tp-filters">
+              <div className="tp-frow">
+                <input className="tp-search" value={searchProd} onChange={e=>{setSearchProd(e.target.value); setProdPage(1);}} placeholder="Buscar por nombre o código…"/>
+                <select className="tp-select" value={catFilter} onChange={e=>{setCatFilter(e.target.value); setProdPage(1);}}>
+                  <option value="all">Todas las categorías</option>
+                  {catNames.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="tp-chips">
+                {PROD_FILTERS.map(([k,l,t])=>(
+                  <button key={k} className={`tp-chip${prodFilter===k?" on":""}`} onClick={()=>{setProdFilter(k); setProdPage(1);}}>
+                    {l} <em>{products.filter(p=>catFilter==="all"||p.category_name===catFilter).filter(t).length}</em>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {filteredProdsPaged.map((p:any)=>(
-                <div key={p.id} style={{...card,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                  {p.image_url
-                    ? <img src={p.image_url} alt="" style={{width:52,height:52,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
-                    : <div style={{width:52,height:52,borderRadius:8,background:"#f3f4f6",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:600,color:"#999",textAlign:"center",lineHeight:1.2}}>Sin foto</div>}
-                  <div style={{flex:"1 1 220px",minWidth:0}}>
-                    <select value={p.category_id} onChange={e=>patchProduct(p.id,{category_id:Number(e.target.value)})}
-                      style={{fontSize:11,color:"#666",background:"transparent",border:"none",outline:"none",cursor:"pointer",fontFamily:"inherit",padding:0,marginTop:2,maxWidth:"100%"}}>
-                      {categories.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <p style={{fontWeight:600,fontSize:13,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
-                    <div style={{display:"flex",gap:10,marginTop:4,alignItems:"center",flexWrap:"wrap"}}>
-                      <span style={{fontSize:13,fontWeight:700,color:"#0891b2"}}>{fmt(Number(p.price_retail))}</span>
-                      <span style={{fontSize:12,color:"#2563eb"}}>Mayorista {fmt(Number(p.price_wholesale))}</span>
-                    </div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:6}}>
-                      <select value={p.stock_level} onChange={e=>patchProduct(p.id,{stock_level:e.target.value})}
-                        style={{color:STOCK[p.stock_level]?.color,background:STOCK[p.stock_level]?.bg,border:`1px solid ${STOCK[p.stock_level]?.color}44`,fontWeight:700,fontSize:11,borderRadius:6,padding:"3px 6px"}}>
-                        <option value="alto">Alto</option>
-                        <option value="medio">Medio</option>
-                        <option value="bajo">Bajo</option>
-                      </select>
-                      <span style={{fontSize:11,color:"#666"}}>Stock</span>
-                      <input type="number" min="0" value={p.stock_quantity??0}
-                        onChange={e=>setProducts(prev=>prev.map(pp=>pp.id===p.id?{...pp,stock_quantity:Number(e.target.value)}:pp))}
-                        onBlur={e=>{
-                          const qty = Number(e.target.value);
-                          patchProduct(p.id,{
-                            stock_quantity: qty,
-                            stock_level: qty > 10 ? "alto" : qty > 3 ? "medio" : "bajo",
-                            available: qty > 0,
-                          });
-                        }}
-                        style={{width:64,padding:"4px 6px",border:"1px solid #e5e7eb",borderRadius:6,fontSize:12,color:"#1a1a1a",fontFamily:"inherit",outline:"none"}}/>
-                      <span style={{fontSize:11,color:"#666"}}>u.</span>
-                    </div>
-                  </div>
-                  <div className="prod-actions">
-                    <button className="toggle" title={p.available?"Disponible":"No disponible"} style={{background:p.available?"rgba(16,185,129,.6)":"#e5e7eb"}} onClick={()=>patchProduct(p.id,{available:!p.available})}>
-                      <div className="thumb" style={{left:p.available?18:3}}/>
-                    </button>
-                    <label className="act-btn" style={{...btn("green")}}>
-                      {uploadingId===p.id?"Subiendo...":"Foto"}
+            <div className="tp-card flush">
+              <div className="tp-prow tp-phead">
+                <span/><span>Artículo</span><span className="r">Minorista</span><span className="r">Mayorista</span><span className="c">Stock</span><span className="c">En la web</span><span/>
+              </div>
+              {filteredProdsPaged.map((p:any)=>{
+                const qn = qtyOf(p), t = stockTag(qn);
+                return (
+                  <div key={p.id} className={`tp-prow${p.available?"":" off"}`}>
+                    <label className="tp-pthumb" title={p.image_url?"Cambiar foto":"Subir foto"}>
+                      {uploadingId===p.id ? <span className="tp-noimg" style={{width:44,height:44,fontSize:10}}>…</span> : <Thumb p={p}/>}
                       <input type="file" accept="image/*" style={{display:"none"}} disabled={uploadingId===p.id}
                         onChange={e=>{ const f=e.target.files?.[0]; e.target.value=""; if(f) setMainPhoto(p.id,f); }}/>
                     </label>
-                    <button className="act-btn" style={btn("cyan")} onClick={()=>{setEditingProduct({...p}); loadExtraImages(p.id);}}>Editar</button>
-                    <button className="act-btn" style={btn("red")} onClick={()=>deleteProduct(p.id)}>Eliminar</button>
+                    <button className="tp-pname" onClick={()=>openEditForm(p)}>
+                      <b>{p.name}</b>
+                      <small>{[p.sku && `Cód. ${p.sku}`, p.category_name, supName(p.supplier_id)].filter(Boolean).join(" · ")}</small>
+                    </button>
+                    <span className="tp-price r"><small className="m">Minorista</small>{fmt(Number(p.price_retail))}</span>
+                    <span className="tp-price r wh"><small className="m">Mayorista</small>{fmt(Number(p.price_wholesale))}</span>
+                    <span className="tp-stock c">
+                      <input key={`${p.id}-${qn}`} type="number" min="0" defaultValue={qn} inputMode="numeric"
+                        onKeyDown={e=>{ if(e.key==="Enter") (e.target as HTMLInputElement).blur(); }}
+                        onBlur={e=>saveStock(p,e.target.value)} aria-label="Stock"/>
+                      <span className="tp-dot" style={{background:t.color}} title={t.label}/>
+                    </span>
+                    <span className="c tp-web">
+                      <button className={`tp-toggle${p.available?" on":""}`} title={p.available?"Visible en la tienda web":"Oculto en la tienda web"}
+                        onClick={()=>patchProduct(p.id,{available:!p.available})}><i/></button>
+                    </span>
+                    <span className="tp-pacts">
+                      <button className="tp-btn sm" onClick={()=>openEditForm(p)}>Editar</button>
+                    </span>
                   </div>
-                </div>
-              ))}
-              {filteredProds.length===0&&<p style={{color:"#666",fontSize:14}}>No hay productos que coincidan con la búsqueda.</p>}
-              {hasMoreProds&&(
-                <button onClick={()=>setProdPage(p=>p+1)}
-                  style={{width:"100%",padding:12,borderRadius:10,background:"rgba(0,180,216,.08)",border:"1px solid rgba(0,180,216,.2)",color:"#0891b2",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
-                  Cargar más ({filteredProds.length - filteredProdsPaged.length} restantes)
-                </button>
-              )}
+                );
+              })}
+              {filteredProds.length===0&&<p className="tp-empty pad">No hay artículos que coincidan.</p>}
             </div>
+            {hasMoreProds&&(
+              <button className="tp-loadmore" onClick={()=>setProdPage(p=>p+1)}>
+                Mostrar más ({filteredProds.length - filteredProdsPaged.length} restantes)
+              </button>
+            )}
           </div>
         )}
 
-        {/* SIN FOTO */}
+        {/* ═════════ SIN FOTO ═════════ */}
         {tab==="sinfoto"&&(
           <div>
-            <div className="page-head">
+            <div className="tp-head">
               <div>
-                <h2 style={pageTitle}>Sin foto</h2>
-                <p style={{color:"#666",fontSize:13}}>{sinFotoCount} productos sin imagen</p>
+                <h2 className="tp-title">Sin foto</h2>
+                <p className="tp-sub">{sinFoto.length} artículos sin imagen · tocá uno para subirle la foto</p>
               </div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {sinFotoCount===0&&<p style={{color:"#666",fontSize:14}}>Todos los productos tienen foto.</p>}
-              {products
-                .filter((p:any) => !p.image_url)
-                .map((p:any)=>(
-                  <div key={p.id} style={{...card,display:"flex",gap:12,alignItems:"center"}}>
-                    <div style={{width:52,height:52,borderRadius:8,background:"#f3f4f6",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:600,color:"#999",textAlign:"center",lineHeight:1.2}}>Sin foto</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontWeight:600,fontSize:13,color:"#1a1a1a",lineHeight:1.3,wordBreak:"break-word"}}>{p.name}</p>
-                      <p style={{fontSize:12,color:"#666",marginTop:2}}>{p.category_name}</p>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
-                        <span style={{fontSize:12,color:"#666",fontWeight:600}}>{p.stock_quantity??0} u.</span>
-                        <span style={{fontSize:11,fontWeight:700,padding:"2px 6px",borderRadius:6,
-                          color:Number(p.stock_quantity)===0?"#ef4444":Number(p.stock_quantity)<=3?"#ef4444":Number(p.stock_quantity)<=10?"#d97706":"#059669",
-                          background:Number(p.stock_quantity)===0?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=3?"rgba(239,68,68,.1)":Number(p.stock_quantity)<=10?"rgba(245,158,11,.1)":"rgba(16,185,129,.1)"}}>
-                          {Number(p.stock_quantity)===0?"Sin stock":Number(p.stock_quantity)<=3?"Bajo":Number(p.stock_quantity)<=10?"Medio":"Alto"}
-                        </span>
-                      </div>
-                    </div>
-                    <label style={{...btn("amber"),flexShrink:0,padding:"9px 14px"}}>
-                      {uploadingId===p.id?"Subiendo...":"Subir foto"}
-                      <input type="file" accept="image/*" style={{display:"none"}} disabled={uploadingId===p.id}
-                        onChange={e=>{ const f=e.target.files?.[0]; e.target.value=""; if(f) setMainPhoto(p.id,f); }}/>
-                    </label>
-                  </div>
-              ))}
+            <div className="tp-filters">
+              <input className="tp-search" value={searchProd} onChange={e=>setSearchProd(e.target.value)} placeholder="Buscar por nombre o código…"/>
+            </div>
+            {sinFoto.length===0&&<p className="tp-empty">Todos los artículos tienen foto. 🎉</p>}
+            <div className="tp-sfgrid">
+              {sinFoto
+                .filter((p:any)=>!q || p.name.toLowerCase().includes(q) || String(p.sku||"").toLowerCase().includes(q))
+                .sort((a:any,b:any)=>qtyOf(b)-qtyOf(a))
+                .map((p:any)=>{ const t = stockTag(qtyOf(p)); return (
+                <label key={p.id} className="tp-sf">
+                  <span className="tp-sf-drop">
+                    {uploadingId===p.id ? "Subiendo…" : <>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                      Subir foto</>}
+                  </span>
+                  <b>{p.name}</b>
+                  <span className="tp-sf-meta">{p.category_name} <Pill c={t.color} bg={t.bg}>{qtyOf(p)} u.</Pill></span>
+                  <input type="file" accept="image/*" style={{display:"none"}} disabled={uploadingId===p.id}
+                    onChange={e=>{ const f=e.target.files?.[0]; e.target.value=""; if(f) setMainPhoto(p.id,f); }}/>
+                </label>
+              );})}
             </div>
           </div>
         )}
@@ -899,203 +800,485 @@ ${lines}
         </div>
 
         {/* BOTÓN SUBIR */}
-        <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} aria-label="Volver arriba"
-          style={{position:"fixed",bottom:20,right:20,zIndex:90,width:42,height:42,borderRadius:"50%",background:"#ffffff",border:"1px solid #d1d5db",color:"#0891b2",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",boxShadow:"0 2px 8px rgba(0,0,0,.1)"}}>
+        <button className="tp-top" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} aria-label="Volver arriba">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
         </button>
 
-        {/* MODAL EDITAR */}
-        {editingProduct&&(
-          <div className="mo" onClick={()=>setEditingProduct(null)}>
-            <div className="mb" onClick={e=>e.stopPropagation()}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-                <h3 style={{fontSize:17,fontWeight:700,color:"#1a1a1a"}}>Editar producto</h3>
-                <button onClick={()=>setEditingProduct(null)} aria-label="Cerrar" style={{background:"#f3f4f6",border:"none",borderRadius:"50%",width:32,height:32,color:"#666",fontSize:20,lineHeight:1,cursor:"pointer"}}>&times;</button>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:11}}>
-                {/* FOTO PRINCIPAL */}
+        {/* ═════════ VENTANA: EDITAR / NUEVO ARTÍCULO ═════════ */}
+        {form&&(
+          <div className="tp-mo" onMouseDown={e=>{ if(e.target===e.currentTarget) setForm(null); }}>
+            <form className="tp-mb" onSubmit={e=>{e.preventDefault(); saveForm();}}>
+              <div className="tp-mh">
                 <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:8,fontWeight:600}}>FOTO PRINCIPAL</label>
-                  <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                    {editingProduct.image_url
-                      ? <img src={editingProduct.image_url} alt="" style={{width:84,height:84,borderRadius:10,objectFit:"cover",border:"1px solid #e5e7eb"}}/>
-                      : <div style={{width:84,height:84,borderRadius:10,background:"#f3f4f6",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#999",fontWeight:600}}>Sin foto</div>}
-                    <div style={{display:"grid",gap:6}}>
-                      <label style={{...btn("green"),padding:"9px 14px",cursor:"pointer",textAlign:"center"}}>
-                        {uploadingId===editingProduct.id?"Subiendo...":editingProduct.image_url?"Cambiar foto":"Subir foto"}
-                        <input type="file" accept="image/*" style={{display:"none"}} disabled={uploadingId===editingProduct.id}
-                          onChange={e=>{ const f=e.target.files?.[0]; e.target.value=""; if(f) setMainPhoto(editingProduct.id,f); }}/>
-                      </label>
-                      <span style={{fontSize:11,color:"#999"}}>Se guarda al instante</span>
-                    </div>
-                  </div>
+                  <h3>{form.id?"Editar artículo":"Nuevo artículo"}</h3>
+                  {form.id&&<small>#{form.id}{form.sku?` · Cód. ${form.sku}`:""}</small>}
                 </div>
+                <button type="button" className="tp-x" onClick={()=>setForm(null)} aria-label="Cerrar">×</button>
+              </div>
 
-                {/* FOTOS ADICIONALES */}
-                <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:8,fontWeight:600}}>FOTOS ADICIONALES</label>
-                  {loadingImages ? (
-                    <p style={{fontSize:12,color:"#666"}}>Cargando...</p>
-                  ) : (
-                    <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
-                      {extraImages.map((img:any)=>(
-                        <div key={img.id} style={{position:"relative",width:70,height:70}}>
-                          <img src={img.image_url} alt="" style={{width:70,height:70,borderRadius:8,objectFit:"cover"}}/>
-                          <button onClick={()=>deleteExtraPhoto(editingProduct.id, img.id)} aria-label="Quitar foto"
-                            style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#ef4444",border:"none",color:"#fff",fontSize:14,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>
-                            &times;
-                          </button>
+              <div className="tp-mbody">
+                {/* Columna de fotos */}
+                <aside className="tp-photos">
+                  <p className="tp-lbl">Foto principal</p>
+                  <label className="tp-mainph">
+                    {form.image_url
+                      ? <img src={form.image_url} alt=""/>
+                      : <span className="tp-mainph-empty">
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                          <span className="d-only">Tocá para subir</span>
+                        </span>}
+                    <span className="tp-mainph-btn">{uploadingId===(form.id??-1)?"Subiendo…":form.image_url?"Cambiar foto":"Subir foto"}</span>
+                    <input type="file" accept="image/*" style={{display:"none"}} disabled={uploadingId===(form.id??-1)}
+                      onChange={e=>{ const f=e.target.files?.[0]; e.target.value=""; if(!f) return; if(form.id) setMainPhoto(form.id,f); else uploadNewPhoto(f); }}/>
+                  </label>
+                  {form.id ? <p className="tp-hint">La foto se guarda al instante.</p> : <p className="tp-hint">Se guarda junto con el artículo.</p>}
+
+                  {form.id&&(
+                    <>
+                      <p className="tp-lbl" style={{marginTop:14}}>Más fotos</p>
+                      {loadingImages ? <p className="tp-hint">Cargando…</p> : (
+                        <div className="tp-extras">
+                          {extraImages.map((img:any)=>(
+                            <div key={img.id} className="tp-extra">
+                              <img src={img.image_url} alt=""/>
+                              <button type="button" onClick={()=>deleteExtraPhoto(form.id!, img.id)} aria-label="Quitar foto">×</button>
+                            </div>
+                          ))}
+                          <label className="tp-extra add" title="Agregar foto">+
+                            <input type="file" accept="image/*" style={{display:"none"}}
+                              onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(form.id!,f); e.target.value="";}}/>
+                          </label>
                         </div>
-                      ))}
-                      <label style={{width:70,height:70,borderRadius:8,border:"2px dashed #d1d5db",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:24,color:"#999"}}>
-                        +
-                        <input type="file" accept="image/*" style={{display:"none"}}
-                          onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(editingProduct.id,f); e.target.value="";}}/>
-                      </label>
-                    </div>
+                      )}
+                    </>
                   )}
-                  <p style={{fontSize:11,color:"#999"}}>Tocá + para agregar más fotos al producto</p>
-                </div>
+                </aside>
 
-                {/* CAMPOS */}
-                {([["Nombre","name","text"],["Descripción","description","text"],["Precio de costo","cost_price","number"],["Precio minorista","price_retail","number"],["Precio mayorista","price_wholesale","number"],["Stock","stock_quantity","number"],["URL imagen","image_url","text"]] as [string,string,string][]).map(([label,key,type])=>(
-                  <div key={key}>
-                    <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>{label.toUpperCase()}</label>
-                    <input type={type} style={inp}
-                      value={type==="number"&&(editingProduct[key]===0||editingProduct[key]==="0")?"":editingProduct[key]??""}
-                      placeholder={type==="number"?"0":""}
-                      onChange={e=>setEditingProduct((p:any)=>({...p,[key]:type==="number"?Number(e.target.value):e.target.value}))}/>
-                  </div>
-                ))}
-
-                <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
-                  <select value={editingProduct.stock_level} onChange={e=>setEditingProduct((p:any)=>({...p,stock_level:e.target.value}))} style={{...inp,cursor:"pointer"}}>
-                    <option value="alto">Alto</option><option value="medio">Medio</option><option value="bajo">Bajo</option>
-                  </select>
-                </div>
-                <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-                  {([["available","Disponible"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as [string,string][]).map(([key,label])=>(
-                    <label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",color:"#1a1a1a"}}>
-                      <input type="checkbox" checked={!!editingProduct[key]} onChange={e=>setEditingProduct((p:any)=>({...p,[key]:e.target.checked}))}/>{label}
+                {/* Columna de datos */}
+                <div className="tp-fields">
+                  <fieldset>
+                    <legend>Datos</legend>
+                    <label className="tp-f full">Nombre *
+                      <input autoFocus={!form.id} value={form.name} onChange={e=>setF({name:e.target.value})}/>
                     </label>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:9,marginTop:4}}>
-                  <button style={{...btn("cyan"),flex:1,padding:11,fontSize:13}} onClick={saveEditProduct}>Guardar</button>
-                  <button style={{...btn("default"),padding:"11px 14px",fontSize:13}} onClick={()=>setEditingProduct(null)}>Cancelar</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+                    <label className="tp-f m-full">Categoría *
+                      <select value={form.category_id} onChange={e=>setF({category_id:e.target.value})}>
+                        <option value="">Elegir…</option>
+                        {categories.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="tp-f m-full">Proveedor
+                      <select value={form.supplier_id} onChange={e=>setF({supplier_id:e.target.value})}>
+                        <option value="">Sin proveedor</option>
+                        {suppliersList.map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="tp-f">Código / SKU
+                      <input value={form.sku} onChange={e=>setF({sku:e.target.value})} placeholder="Opcional"/>
+                    </label>
+                    <label className="tp-f">Stock (unidades)
+                      <input type="number" min="0" inputMode="numeric" value={form.stock_quantity} placeholder="0" onChange={e=>setF({stock_quantity:e.target.value})}/>
+                    </label>
+                  </fieldset>
 
-        {/* MODAL AGREGAR */}
-        {addingProduct&&(
-          <div className="mo" onClick={()=>setAddingProduct(false)}>
-            <div className="mb" onClick={e=>e.stopPropagation()}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-                <h3 style={{fontSize:17,fontWeight:700,color:"#1a1a1a"}}>Agregar producto</h3>
-                <button onClick={()=>setAddingProduct(false)} aria-label="Cerrar" style={{background:"#f3f4f6",border:"none",borderRadius:"50%",width:32,height:32,color:"#666",fontSize:20,lineHeight:1,cursor:"pointer"}}>&times;</button>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:11}}>
-                <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NOMBRE *</label><input style={inp} value={newProduct.name} onChange={e=>setNewProduct(p=>({...p,name:e.target.value}))}/></div>
-                <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>DESCRIPCIÓN</label><input style={inp} value={newProduct.description} onChange={e=>setNewProduct(p=>({...p,description:e.target.value}))}/></div>
-                <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>CATEGORÍA *</label>
-                  <select style={{...inp,cursor:"pointer"}} value={newProduct.category_id} onChange={e=>setNewProduct(p=>({...p,category_id:e.target.value}))}>
-                    <option value="">Seleccionar...</option>
-                    {categories.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>PROVEEDOR</label>
-                  <select style={{...inp,cursor:"pointer"}} value={newProduct.supplier_id} onChange={e=>setNewProduct(p=>({...p,supplier_id:e.target.value}))}>
-                    <option value="">Sin proveedor</option>
-                    {suppliersList.map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}
-                  </select>
-                </div>
+                  <fieldset className="tp-prices">
+                    <legend>Precios</legend>
+                    <label className="tp-f tp-costbox"><span>Costo <span className="opt">(lo que te cuesta)</span></span>
+                      <span className="tp-money"><i>$</i><input type="number" min="0" inputMode="decimal" value={form.cost_price} placeholder="0"
+                        onChange={e=>{const c=e.target.value; setForm(f=>f?{...f,cost_price:c,
+                          price_retail: priceFrom(c,f.pct_retail) || f.price_retail,
+                          price_wholesale: priceFrom(c,f.pct_wholesale) || f.price_wholesale}:f);}}/></span>
+                    </label>
+                    {([["Minorista","retail"],["Mayorista","wholesale"]] as const).map(([lbl,k])=>{
+                      const pk = `pct_${k}` as "pct_retail"|"pct_wholesale", vk = `price_${k}` as "price_retail"|"price_wholesale";
+                      return (
+                        <div key={k} className="tp-pricebox">
+                          <span className="tp-pricebox-h">{lbl} *</span>
+                          <div className="tp-pricebox-row">
+                            <span className="tp-money pct"><input type="number" inputMode="decimal" value={form[pk]} placeholder="%" title="% de ganancia sobre el costo"
+                              onChange={e=>{const v=e.target.value; setForm(f=>f?{...f,[pk]:v,[vk]:priceFrom(f.cost_price,v)||f[vk]}:f);}}/><i>%</i></span>
+                            <span className="tp-money big"><i>$</i><input type="number" min="0" inputMode="decimal" value={form[vk]} placeholder="0"
+                              onChange={e=>{const v=e.target.value; setForm(f=>f?{...f,[vk]:v,[pk]:pctFrom(f.cost_price,v)||f[pk]}:f);}}/></span>
+                          </div>
+                          <small>{marginTxt(form[vk]) || "Con el costo cargado, el % calcula el precio solo"}</small>
+                        </div>
+                      );
+                    })}
+                  </fieldset>
 
-                {/* Precio por porcentaje sobre el costo */}
-                <div style={{border:"1px solid rgba(0,180,216,.3)",background:"rgba(0,180,216,.05)",borderRadius:10,padding:12,display:"grid",gap:10}}>
-                  <div>
-                    <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>PRECIO DE COSTO</label>
-                    <input type="number" min="0" style={inp} placeholder="Lo que te cuesta a vos" value={newProduct.cost_price}
-                      onChange={e=>{const c=e.target.value; setNewProduct(p=>({...p,cost_price:c,
-                        price_retail: priceFrom(c,p.pct_retail) || p.price_retail,
-                        price_wholesale: priceFrom(c,p.pct_wholesale) || p.price_wholesale}));}}/>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                    <div>
-                      <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>% GANANCIA MINORISTA</label>
-                      <div style={{position:"relative"}}>
-                        <input type="number" style={{...inp,paddingRight:28}} placeholder="Ej: 60" value={newProduct.pct_retail}
-                          onChange={e=>{const v=e.target.value; setNewProduct(p=>({...p,pct_retail:v,price_retail:priceFrom(p.cost_price,v)||p.price_retail}));}}/>
-                        <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",color:"#888",fontSize:13}}>%</span>
-                      </div>
+                  <fieldset>
+                    <legend>Tienda web</legend>
+                    <label className="tp-f full"><span>Descripción <span className="opt">(se ve en la página del producto)</span></span>
+                      <textarea rows={2} value={form.description} onChange={e=>setF({description:e.target.value})}/>
+                    </label>
+                    <div className="tp-switches">
+                      {([["available","Visible en la web"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as const).map(([k,l])=>(
+                        <label key={k} className={`tp-sw${form[k]?" on":""}`}>
+                          <input type="checkbox" checked={!!form[k]} onChange={e=>setF({[k]:e.target.checked} as any)}/>{l}
+                        </label>
+                      ))}
                     </div>
-                    <div>
-                      <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>% GANANCIA MAYORISTA</label>
-                      <div style={{position:"relative"}}>
-                        <input type="number" style={{...inp,paddingRight:28}} placeholder="Ej: 30" value={newProduct.pct_wholesale}
-                          onChange={e=>{const v=e.target.value; setNewProduct(p=>({...p,pct_wholesale:v,price_wholesale:priceFrom(p.cost_price,v)||p.price_wholesale}));}}/>
-                        <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",color:"#888",fontSize:13}}>%</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                    <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>PRECIO MINORISTA *</label><input type="number" style={{...inp,fontWeight:700}} value={newProduct.price_retail}
-                      onChange={e=>{const v=e.target.value; setNewProduct(p=>({...p,price_retail:v,pct_retail:pctFrom(p.cost_price,v)||p.pct_retail}));}}/></div>
-                    <div><label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>PRECIO MAYORISTA *</label><input type="number" style={{...inp,fontWeight:700}} value={newProduct.price_wholesale}
-                      onChange={e=>{const v=e.target.value; setNewProduct(p=>({...p,price_wholesale:v,pct_wholesale:pctFrom(p.cost_price,v)||p.pct_wholesale}));}}/></div>
-                  </div>
-                  <p style={{fontSize:11,color:"#666"}}>Cargá el costo y el % de ganancia: los precios se calculan solos (redondeados a $10). También podés escribir el precio y se calcula el %.</p>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                  <div>
-                    <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>STOCK</label>
-                    <input type="number" min="0" style={inp} value={newProduct.stock_quantity||""}
-                      placeholder="0" onChange={e=>setNewProduct(p=>({...p,stock_quantity:Number(e.target.value)}))}/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>NIVEL STOCK</label>
-                    <select style={{...inp,cursor:"pointer"}} value={newProduct.stock_level} onChange={e=>setNewProduct(p=>({...p,stock_level:e.target.value}))}>
-                      <option value="alto">Alto</option><option value="medio">Medio</option><option value="bajo">Bajo</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label style={{fontSize:11,color:"#444",display:"block",marginBottom:4,fontWeight:600}}>FOTO</label>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    {newProduct.image_url && <img src={newProduct.image_url} alt="" style={{width:44,height:44,borderRadius:8,objectFit:"cover",flexShrink:0}}/>}
-                    <label style={{...btn("green"),padding:"9px 14px",cursor:"pointer",flexShrink:0}}>
-                      {uploadingId===-1?"Subiendo...":newProduct.image_url?"Cambiar":"Subir foto"}
-                      <input type="file" accept="image/*" style={{display:"none"}} disabled={uploadingId===-1}
-                        onChange={async e=>{ const f=e.target.files?.[0]; e.target.value=""; if(!f) return;
-                          setUploadingId(-1);
-                          try { const url = await uploadProductImage(f); setNewProduct(p=>({...p,image_url:url})); }
-                          catch(err:any){ alert(err.message||"No se pudo subir la foto"); }
-                          finally { setUploadingId(null); } }}/>
-                    </label>
-                    <input style={inp} placeholder="o pegá una URL https://..." value={newProduct.image_url} onChange={e=>setNewProduct(p=>({...p,image_url:e.target.value}))}/>
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-                  {([["available","Disponible"],["featured","Destacado"],["is_offer","Oferta"],["is_new","Novedad"]] as [string,string][]).map(([key,label])=>(
-                    <label key={key} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",color:"#1a1a1a"}}>
-                      <input type="checkbox" checked={!!(newProduct as any)[key]} onChange={e=>setNewProduct(p=>({...p,[key]:e.target.checked}))}/>{label}
-                    </label>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:9,marginTop:4}}>
-                  <button style={{...btn("green"),flex:1,padding:11,fontSize:13}} onClick={saveNewProduct}>Guardar producto</button>
-                  <button style={{...btn("default"),padding:"11px 14px",fontSize:13}} onClick={()=>setAddingProduct(false)}>Cancelar</button>
+                    {Number(form.stock_quantity||0)<=0&&<p className="tp-hint">Sin stock: no se muestra en la tienda hasta que cargues unidades.</p>}
+                  </fieldset>
                 </div>
               </div>
-            </div>
+
+              <div className="tp-mf">
+                {form.id
+                  ? <button type="button" className="tp-del" onClick={async()=>{ if(await deleteProduct(form.id!)) setForm(null); }}><span className="d-only">Eliminar artículo</span><span className="m-only">Eliminar</span></button>
+                  : <span className="tp-hint d-only">Enter para guardar · Esc para cerrar</span>}
+                <div style={{display:"flex",gap:8}}>
+                  <button type="button" className="tp-btn" onClick={()=>setForm(null)}>Cancelar</button>
+                  <button type="submit" className="tp-btn primary" disabled={saving}>{saving?"Guardando…":form.id?"Guardar cambios":"Crear artículo"}</button>
+                </div>
+              </div>
+            </form>
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+const CSS = `
+.tienda{color:#1a1a1a}
+.admin-content{min-width:0;overflow-x:clip}
+.admin-inner{max-width:1180px;margin:0 auto}
+.tienda button,.tienda label{font-family:inherit}
+.tp-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.tp-title{font-size:22px;font-weight:700;margin:0}
+.tp-sub{color:#6b7280;font-size:13px;margin-top:2px}
+.tp-actions{display:flex;gap:8px;flex-wrap:wrap}
+.tp-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:9px;border:1px solid #e5e7eb;background:#fff;color:#374151;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+.tp-btn:hover:not(:disabled){background:#f9fafb;border-color:#d1d5db}
+.tp-btn.sm{padding:6px 11px;font-size:12px}
+.tp-btn.on{background:#ecfeff;border-color:#67e8f9;color:#0e7490}
+.tp-btn.primary{background:#0891b2;border-color:#0891b2;color:#fff}
+.tp-btn.primary:hover:not(:disabled){background:#0e7490;border-color:#0e7490}
+.tp-btn.primary:disabled{opacity:.6}
+.tp-btn.green{background:#ecfdf5;border-color:#6ee7b7;color:#047857}
+.tp-btn.wa{background:#22c55e;border-color:#22c55e;color:#fff}
+.tp-btn.wa:hover{background:#16a34a!important}
+.tp-btn kbd{font:600 10px/1 inherit;background:rgba(255,255,255,.22);padding:3px 5px;border-radius:4px}
+.tp-pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.tp-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px 18px}
+.tp-card.flush{padding:0;overflow:hidden}
+.tp-card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px}
+.tp-card-h h3{font-size:15px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px}
+.tp-count{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:#f3f4f6;color:#374151}
+.tp-count.red{background:#fee2e2;color:#b91c1c}
+.tp-empty{color:#6b7280;font-size:13px}
+.tp-empty.pad{padding:18px}
+.tp-more{font-size:12px;color:#6b7280;margin-top:6px;text-align:center}
+.tp-hint{font-size:11.5px;color:#6b7280;margin-top:6px}
+.tp-lbl{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.r{text-align:right}.c{text-align:center}
+.m-only{display:none}
+
+/* Filtros */
+.tp-filters{display:grid;gap:10px;margin-bottom:12px}
+.tp-frow{display:flex;gap:8px;flex-wrap:wrap}
+.tp-search{flex:1 1 260px;min-width:0;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none;font-family:inherit;background:#fff;color:#1a1a1a}
+.tp-search:focus,.tp-select:focus{border-color:#67e8f9;box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.tp-select{padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:13px;background:#fff;color:#1a1a1a;outline:none;font-family:inherit;min-width:200px;cursor:pointer}
+.tp-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.tp-chips::-webkit-scrollbar{display:none}
+.tp-chip{flex-shrink:0;padding:6px 12px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tp-chip em{font-style:normal;font-size:11px;color:#9ca3af;margin-left:3px}
+.tp-chip.on{background:#0891b2;border-color:#0891b2;color:#fff}
+.tp-chip.on em{color:#cffafe}
+
+/* Lista de artículos */
+.tp-prow{display:grid;grid-template-columns:44px minmax(0,1fr) 110px 110px 104px 76px 82px;align-items:center;gap:12px;padding:8px 14px;border-top:1px solid #f1f3f5}
+.tp-prow:hover{background:#fafbfc}
+.tp-prow.off .tp-pname b{color:#9ca3af}
+.tp-phead{border-top:none;background:#f9fafb;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;padding:9px 14px}
+.tp-phead:hover{background:#f9fafb}
+.tp-pthumb{cursor:pointer;display:block;line-height:0;border-radius:9px}
+.tp-pthumb:hover{outline:2px solid #67e8f9;outline-offset:1px}
+.tp-img{border-radius:9px;object-fit:cover;background:#f3f4f6;display:block}
+.tp-noimg{display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#f3f4f6;color:#9ca3af;border:1px dashed #d1d5db}
+.tp-pname{all:unset;cursor:pointer;min-width:0;display:flex;flex-direction:column;gap:2px}
+.tp-pname b{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-pname small{font-size:11.5px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-pname:hover b{color:#0e7490;text-decoration:underline}
+.tp-price{font-size:14px;font-weight:700;color:#0e7490;font-variant-numeric:tabular-nums}
+.tp-price.wh{color:#1d4ed8;font-weight:600}
+.tp-price .m{display:none}
+.tp-stock{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.tp-stock input{width:64px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;text-align:center;font-family:inherit;outline:none;color:#1a1a1a;font-weight:600}
+.tp-stock input:focus{border-color:#67e8f9;box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.tp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tp-toggle{width:38px;height:22px;border-radius:999px;border:none;background:#d1d5db;position:relative;cursor:pointer;transition:background .2s;padding:0}
+.tp-toggle i{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .2s}
+.tp-toggle.on{background:#10b981}
+.tp-toggle.on i{left:19px}
+.tp-pacts{display:flex;justify-content:flex-end}
+.tp-loadmore{width:100%;margin-top:10px;padding:11px;border-radius:10px;border:1px dashed #a5f3fc;background:#f0fdff;color:#0e7490;font-size:13px;font-weight:600;cursor:pointer}
+
+/* Pedidos */
+.tp-orow{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:92px minmax(0,1.3fr) minmax(0,1fr) 110px 190px 20px;gap:12px;align-items:center;padding:11px 16px;cursor:pointer}
+.tp-ohead{cursor:default;background:#f9fafb;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;padding:9px 16px}
+.tp-oitem{border-top:1px solid #f1f3f5}
+.tp-oitem:hover>.tp-orow{background:#fafbfc}
+.tp-oitem.open{background:#fbfeff}
+.tp-oitem.open>.tp-orow{background:#ecfeff}
+.tp-oid,.tp-ocli,.tp-odel{display:flex;flex-direction:column;gap:1px;min-width:0;font-size:13px}
+.tp-oid b,.tp-ocli b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-oid small,.tp-ocli small,.tp-odel small{font-size:11.5px;color:#6b7280}
+.tp-ototal{font-size:15px;color:#0e7490;font-variant-numeric:tabular-nums}
+.tp-otags{display:flex;gap:5px;flex-wrap:wrap}
+.tp-chev{color:#9ca3af;font-size:12px;text-align:center}
+.tp-odetail{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;padding:6px 16px 16px}
+.tp-oitems{align-self:start;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:6px 12px}
+.tp-oline{display:grid;grid-template-columns:44px minmax(0,1fr) 90px 100px;gap:10px;padding:7px 0;border-top:1px dashed #eef0f2;font-size:13px;align-items:center}
+.tp-oline.head{border-top:none;font-size:10.5px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em}
+.tp-oline b:first-child{color:#0e7490}
+.tp-oline.total{border-top:1px solid #e5e7eb;font-weight:700;font-size:14px}
+.tp-oaddr{font-size:12.5px;color:#4b5563;padding:8px 0 4px;border-top:1px dashed #eef0f2}
+.tp-oside{display:grid;gap:14px;align-content:start}
+.tp-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tp-seg button{padding:8px;border-radius:9px;border:1px solid #e5e7eb;background:#fff;color:#4b5563;font-size:12.5px;font-weight:600;cursor:pointer}
+.tp-seg button.on{font-weight:700}
+.tp-oacts{display:grid;gap:6px}
+
+/* Resumen */
+.tp-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.tp-kpi{all:unset;box-sizing:border-box;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.tp-kpi span{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}
+.tp-kpi b{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.tp-kpi small{font-size:12px;color:#6b7280}
+.tp-kpi.link{cursor:pointer}
+.tp-kpi.link:hover{border-color:#67e8f9}
+.tp-dash{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;align-items:start}
+.tp-mini{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto 96px;gap:10px;align-items:center;padding:10px 4px;border-top:1px solid #f1f3f5;cursor:pointer}
+.tp-mini:hover{background:#fafbfc}
+.tp-mini-main{display:flex;flex-direction:column;min-width:0}
+.tp-mini-main b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-mini-main small{font-size:11.5px;color:#6b7280}
+.tp-mini-tags{display:flex;gap:4px}
+.tp-mini-total{text-align:right;color:#0e7490;font-size:14px}
+.tp-low{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 2px;border-top:1px solid #f1f3f5}
+.tp-low-name{display:flex;flex-direction:column;min-width:0}
+.tp-low-name b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-low-name small{font-size:11px;color:#6b7280}
+
+/* Sin foto */
+.tp-sfgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.tp-sf{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.tp-sf:hover{border-color:#67e8f9;box-shadow:0 4px 14px rgba(8,145,178,.1)}
+.tp-sf-drop{aspect-ratio:4/3;border:2px dashed #d1d5db;border-radius:10px;background:#f9fafb;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#6b7280;font-size:12.5px;font-weight:600}
+.tp-sf:hover .tp-sf-drop{border-color:#22d3ee;color:#0e7490;background:#ecfeff}
+.tp-sf b{font-size:13px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tp-sf-meta{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11.5px;color:#6b7280}
+
+.tp-top{position:fixed;bottom:20px;right:20px;z-index:90;width:42px;height:42px;border-radius:50%;background:#fff;border:1px solid #d1d5db;color:#0891b2;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+
+/* Ventana editar / nuevo */
+.tp-mo{position:fixed;inset:0;z-index:200;background:rgba(15,23,42,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:16px}
+.tp-mb{background:#fff;color:#1a1a1a;border-radius:18px;width:min(920px,100%);max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.tp-mh{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid #eef0f2}
+.tp-mh h3{font-size:18px;font-weight:700;margin:0}
+.tp-mh small{font-size:12px;color:#6b7280}
+.tp-x{width:34px;height:34px;border-radius:50%;border:none;background:#f3f4f6;color:#4b5563;font-size:22px;line-height:1;cursor:pointer}
+.tp-mbody{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:18px 22px;overflow-y:auto;min-height:0}
+.tp-photos{min-width:0}
+.tp-mainph{display:block;position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;background:#f9fafb;cursor:pointer}
+.tp-mainph img{width:100%;height:100%;object-fit:cover;display:block}
+.tp-mainph-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#9ca3af;font-size:12px;font-weight:600;border:2px dashed #d1d5db;border-radius:14px}
+.tp-mainph-btn{position:absolute;left:8px;right:8px;bottom:8px;text-align:center;padding:7px;border-radius:9px;background:rgba(255,255,255,.94);color:#047857;font-size:12.5px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.tp-mainph:hover .tp-mainph-btn{background:#ecfdf5}
+.tp-extras{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tp-extra{position:relative;aspect-ratio:1;border-radius:8px;overflow:visible}
+.tp-extra img{width:100%;height:100%;object-fit:cover;border-radius:8px;display:block}
+.tp-extra button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:2px solid #fff;background:#ef4444;color:#fff;font-size:13px;line-height:1;cursor:pointer;padding:0}
+.tp-extra.add{border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:22px;cursor:pointer;border-radius:8px}
+.tp-extra.add:hover{border-color:#22d3ee;color:#0e7490}
+.tp-fields{display:grid;gap:14px;min-width:0}
+.tp-fields fieldset{border:1px solid #eef0f2;border-radius:14px;padding:12px 14px 14px;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;min-width:0}
+.tp-fields legend{font-size:11px;font-weight:700;color:#0e7490;text-transform:uppercase;letter-spacing:.05em;padding:0 6px}
+.tp-f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#374151;min-width:0}
+.tp-f.full{grid-column:1/-1}
+.tp-f .opt{font-weight:500;color:#9ca3af}
+.tp-f input,.tp-f select,.tp-f textarea,.tp-money input{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #e5e7eb;border-radius:9px;font-size:14px;font-family:inherit;color:#1a1a1a;background:#fff;outline:none;font-weight:500}
+.tp-f textarea{resize:vertical;min-height:44px}
+.tp-f input:focus,.tp-f select:focus,.tp-f textarea:focus,.tp-money input:focus{border-color:#22d3ee;box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.tp-money{position:relative;display:block}
+.tp-money i{position:absolute;top:50%;transform:translateY(-50%);left:11px;font-style:normal;color:#9ca3af;font-size:13px;pointer-events:none}
+.tp-money input{padding-left:24px}
+.tp-money.pct{width:84px;flex-shrink:0}
+.tp-money.pct input{padding-left:10px;padding-right:24px}
+.tp-money.pct i{left:auto;right:10px}
+.tp-money.big{flex:1;min-width:0}
+.tp-money.big input{font-size:16px;font-weight:700}
+.tp-fields fieldset.tp-prices{grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr);align-items:stretch}
+.tp-costbox{border-radius:12px;background:#f9fafb;padding:10px;justify-content:flex-start}
+.tp-pricebox{border-radius:12px;background:#f9fafb;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tp-pricebox-h{font-size:12px;font-weight:700;color:#374151}
+.tp-pricebox-row{display:flex;gap:6px}
+.tp-pricebox small{font-size:11px;color:#6b7280;min-height:14px}
+.tp-switches{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+.tp-sw{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;border:1px solid #e5e7eb;font-size:13px;font-weight:600;color:#4b5563;cursor:pointer;user-select:none}
+.tp-sw input{accent-color:#0891b2;width:15px;height:15px;margin:0}
+.tp-sw.on{background:#ecfeff;border-color:#67e8f9;color:#0e7490}
+.tp-fields .tp-hint{grid-column:1/-1;margin:0}
+.tp-mf{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid #eef0f2;background:#fafbfc}
+.tp-mf .tp-btn{padding:10px 18px;font-size:14px}
+.tp-del{border:none;background:none;color:#dc2626;font-size:13px;font-weight:600;cursor:pointer;padding:8px 4px}
+.tp-del:hover{text-decoration:underline}
+
+/* ── Tablet / celular ── */
+@media(max-width:1000px){
+  .tp-orow{grid-template-columns:80px minmax(0,1fr) 100px 170px 16px}
+  .tp-odel,.tp-ohead span:nth-child(3){display:none}
+  .tp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tp-dash{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:760px){
+  .tp-title{font-size:20px}
+  .tp-actions{width:100%}
+  .tp-actions .tp-btn{flex:1 1 auto}
+  .tp-actions .tp-btn.primary{flex-basis:100%}
+  .tp-select{min-width:0;flex:1 1 100%}
+  .tp-phead,.tp-ohead{display:none}
+  .tp-prow{grid-template-columns:52px minmax(0,1fr) auto;grid-template-areas:"img name name" "img ret wh" "stk stk web";gap:6px 10px;padding:12px}
+  .tp-pthumb{grid-area:img}.tp-pthumb .tp-img,.tp-pthumb .tp-noimg{width:52px!important;height:52px!important}
+  .tp-pname{grid-area:name}
+  .tp-pname b{white-space:normal}
+  .tp-price{grid-area:ret;text-align:left;font-size:14px}
+  .tp-price.wh{grid-area:wh;text-align:right}
+  .tp-price .m{display:block;font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase}
+  .tp-stock{grid-area:stk;justify-content:flex-start}
+  .tp-stock::before{content:"Stock";font-size:12px;color:#6b7280;font-weight:600}
+  .tp-web{grid-area:web;display:flex;align-items:center;justify-content:flex-end;gap:6px}
+  .tp-web::before{content:"En la web";font-size:12px;color:#6b7280;font-weight:600}
+  .tp-pacts{display:none}
+  .tp-orow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"cli total" "tags id";gap:4px 10px;padding:12px 14px}
+  .tp-ocli{grid-area:cli}.tp-ototal{grid-area:total}.tp-otags{grid-area:tags}.tp-oid{grid-area:id;text-align:right;flex-direction:row;gap:6px;justify-content:flex-end;align-items:center}
+  .tp-chev{display:none}
+  .tp-odetail{grid-template-columns:minmax(0,1fr);padding:4px 12px 14px}
+  .tp-oline{grid-template-columns:34px minmax(0,1fr) 84px}
+  .tp-oline>:nth-child(3){display:none}
+  .tp-mini{grid-template-columns:minmax(0,1fr) 90px}
+  .tp-mini-tags{display:none}
+  .tp-mo{padding:0;align-items:flex-end}
+  .tp-mb{border-radius:18px 18px 0 0;max-height:94vh}
+  .tp-mh{padding:14px 16px}
+  .tp-mbody{grid-template-columns:minmax(0,1fr);padding:14px 16px;gap:14px}
+  .tp-photos{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 12px;align-items:start}
+  .tp-photos>.tp-lbl:first-child{grid-column:1/-1}
+  .tp-photos>.tp-hint,.tp-photos>.tp-lbl:not(:first-child),.tp-photos>.tp-extras{grid-column:2}
+  .tp-mainph{grid-row:2/span 3}
+  .tp-mainph-btn{font-size:11px;padding:5px}
+  .tp-fields fieldset{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .tp-fields fieldset.tp-prices{grid-template-columns:minmax(0,1fr)}
+  .tp-f.m-full{grid-column:1/-1}
+  .d-only{display:none}.m-only{display:inline}
+  .tp-mf{padding:10px 16px}
+  .tp-mf .tp-btn{padding:10px 14px}
+}
+`;
+
+function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; products:any[]; onAdjust:(ids:number[],pct:number)=>void }) {
+  const [mode, setMode]         = useState<"category"|"supplier"|"product">("category");
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [supId, setSupId]       = useState("");
+  useEffect(()=>{ fetch("/api/crm/suppliers",{credentials:"include"}).then(r=>r.ok?r.json():[]).then(d=>Array.isArray(d)&&setSuppliers(d)).catch(()=>{}); },[]);
+  const [catId, setCatId]       = useState("all");
+  const [search, setSearch]     = useState("");
+  const [selected, setSelected] = useState<number|null>(null);
+  const [pct, setPct]           = useState("");
+  const [loading, setLoading]   = useState(false);
+
+  const filtered = (products||[]).filter((p:any)=>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  ).slice(0,8);
+
+  const handle = async() => {
+    const n = Number(pct);
+    if (!pct||isNaN(n)||n===0) { alert("Ingresá un porcentaje válido"); return; }
+    let ids: number[] = [];
+    let label = "";
+    if (mode==="category") {
+      ids = catId==="all" ? products.map((p:any)=>p.id) : products.filter((p:any)=>String(p.category_id)===catId).map((p:any)=>p.id);
+      label = catId==="all" ? "todas las categorías" : categories.find((c:any)=>c.id===Number(catId))?.name;
+    } else if (mode==="supplier") {
+      if (!supId) { alert("Elegí un proveedor"); return; }
+      ids = products.filter((p:any)=>String(p.supplier_id)===supId).map((p:any)=>p.id);
+      if (!ids.length) { alert("Ese proveedor no tiene productos asignados"); return; }
+      label = `los ${ids.length} productos de ${suppliers.find((x:any)=>String(x.id)===supId)?.name}`;
+    } else {
+      if (!selected) { alert("Seleccioná un producto"); return; }
+      ids = [selected];
+      label = products.find((p:any)=>p.id===selected)?.name;
+    }
+    if (!confirm(`¿Ajustar precios ${n>0?"+":""}${n}% en ${label}?`)) return;
+    setLoading(true);
+    await onAdjust(ids, n);
+    setPct(""); setSearch(""); setSelected(null);
+    setLoading(false);
+  };
+
+  return (
+    <div style={{padding:"14px 16px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:12,marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+        <span style={{fontSize:13,fontWeight:700,color:"#1a1a1a"}}>Ajustar precios por porcentaje</span>
+        <div style={{display:"flex",gap:6}}>
+          {[["category","Por categoría"],["supplier","Por proveedor"],["product","Por producto"]].map(([m,l])=>(
+            <button key={m} onClick={()=>setMode(m as "category"|"supplier"|"product")}
+              style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${mode===m?"rgba(0,180,216,.5)":"#e5e7eb"}`,background:mode===m?"rgba(0,180,216,.12)":"#ffffff",color:mode===m?"#00B4D8":"#666",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
+        {mode==="category" ? (
+          <select value={catId} onChange={e=>setCatId(e.target.value)}
+            style={{padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit",minWidth:200}}>
+            <option value="all">Todas las categorías</option>
+            {categories.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        ) : mode==="supplier" ? (
+          <select value={supId} onChange={e=>setSupId(e.target.value)}
+            style={{padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit",minWidth:220}}>
+            <option value="">Elegí un proveedor…</option>
+            {suppliers.map((x:any)=>{
+              const n = products.filter((p:any)=>p.supplier_id===x.id).length;
+              return <option key={x.id} value={x.id}>{x.name} ({n} {n===1?"producto":"productos"})</option>;
+            })}
+          </select>
+        ) : (
+          <div style={{position:"relative",minWidth:240,flex:"1 1 240px",maxWidth:380}}>
+            <input value={search} onChange={e=>{setSearch(e.target.value);setSelected(null);}}
+              placeholder="Buscar producto..."
+              style={{width:"100%",padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+            {search&&!selected&&filtered.length>0&&(
+              <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:8,zIndex:50,maxHeight:200,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,.1)"}}>
+                {filtered.map((p:any)=>(
+                  <div key={p.id} onClick={()=>{setSelected(p.id);setSearch(p.name);}}
+                    style={{padding:"8px 12px",cursor:"pointer",fontSize:13,color:"#1a1a1a",borderBottom:"1px solid #f3f4f6"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background="#f9fafb"}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="#ffffff"}}>
+                    {p.name} - <span style={{color:"#00B4D8"}}>${Number(p.price_retail).toLocaleString("es-AR")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {selected&&<p style={{fontSize:11,color:"#00B4D8",marginTop:3}}>Producto seleccionado</p>}
+          </div>
+        )}
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <input type="number" value={pct} onChange={e=>setPct(e.target.value)} placeholder="Ej: 10 o -5"
+            style={{width:110,padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+          <span style={{fontSize:12,color:"#666"}}>%</span>
+        </div>
+        <button onClick={handle} disabled={loading}
+          style={{padding:"8px 16px",borderRadius:7,background:"#00B4D8",border:"none",color:"#ffffff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",opacity:loading?.6:1}}>
+          {loading?"Aplicando...":"Aplicar"}
+        </button>
+      </div>
+      <p style={{fontSize:11,color:"#666",marginTop:8}}>Positivo sube el precio, negativo lo baja. Ej: 10 sube 10%, -5 baja 5%.</p>
     </div>
   );
 }

@@ -93,9 +93,17 @@ export async function PUT(req: NextRequest, { params }: P) {
       name: b.name, description: b.description, price_retail: b.price_retail, price_wholesale: b.price_wholesale,
       available: b.available, featured: b.featured, is_offer: b.is_offer, is_new: b.is_new,
       stock_level: b.stock_level, image_url: b.image_url, stock_quantity: b.stock_quantity,
+      category_id: b.category_id ? Number(b.category_id) : undefined,
+      supplier_id: b.supplier_id === undefined ? undefined : (b.supplier_id ? Number(b.supplier_id) : null),
+      sku: b.sku === undefined ? undefined : (String(b.sku || "").trim() || null),
       cost_price: b.cost_price === undefined ? undefined : (b.cost_price === "" || b.cost_price === null || Number(b.cost_price) <= 0 ? null : Number(b.cost_price)),
     };
-    const r = await updateProduct(Number(id), data, "Edición desde el panel");
+    let r;
+    try { r = await updateProduct(Number(id), data, "Edición desde el panel"); }
+    catch (e) {
+      if ((e as { code?: string })?.code === "23505") return NextResponse.json({ error: "Ese código ya lo tiene otro artículo" }, { status: 400 });
+      throw e;
+    }
     revalidateTag("products");
     return NextResponse.json(r);
   } catch (e) { return errorResponse(e); }

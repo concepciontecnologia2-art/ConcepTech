@@ -101,6 +101,20 @@ const CSS = `
   .rp-err{padding:10px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px}
   .rp-msg{padding:10px 14px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0;color:#047857;font-size:13px}
   .rp-order{padding:12px 18px;border-bottom:1px solid #f4f5f7;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  /* Pedidos enviados: una tarjeta por pedido, un producto por renglón */
+  .rp-ocard{border:1px solid #e9ecf1;border-radius:12px;background:#fff;overflow:hidden;flex-shrink:0}
+  .rp-ohead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:12px 14px;background:#fafbfc;border-bottom:1px solid #eef0f3}
+  .rp-oname{font-size:15px;font-weight:800;color:#1a1a1a}
+  .rp-ometa{font-size:12px;color:#888;margin-top:2px}
+  .rp-ometa b{color:#475467}
+  .rp-olist{padding:6px 14px}
+  .rp-oline{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed #f0f2f5;font-size:13.5px}
+  .rp-oline:last-of-type{border-bottom:0}
+  .rp-oline b{text-align:right;font-weight:800;color:#0e7490}
+  .rp-oline b::after{content:" ×";color:#98a2b3;font-weight:600}
+  .rp-oline span{color:#1f2937;word-break:break-word}
+  .rp-omore{margin:4px 0 2px 54px;border:0;background:none;color:#0891b2;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;padding:2px 0}
+  .rp-oacts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;padding:10px 14px;border-top:1px solid #eef0f3}
 
   /* Barra del pedido (abajo) y ventana del mensaje */
   .rp-bar{position:sticky;bottom:10px;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#0f172a;color:#fff;border-radius:14px;padding:12px 16px;box-shadow:0 10px 30px rgba(15,23,42,.25)}
@@ -274,6 +288,7 @@ export default function ReposicionPage() {
   const [sel, setSelState] = useState<Sel>({});
   const [filter, setFilter] = useState("");
   const [composing, setComposing] = useState(false);
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   // Lo elegido queda guardado en esta compu hasta que se manda
   useEffect(() => { try { const v = JSON.parse(localStorage.getItem(SEL_KEY) || "{}"); if (v && typeof v === "object") setSelState(v); } catch {} }, []);
@@ -436,20 +451,44 @@ export default function ReposicionPage() {
                     </div>
                   </div>
                 </div>
-                <div className="rp-items">
-                  {d.openOrders.map((o) => (
-                    <div key={o.id} className="rp-order">
-                      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700 }}>{o.supplier_name || "Sin proveedor"} <span style={{ fontWeight: 500, color: "#888", fontSize: 12 }}>· pedido #{o.id} · {when(o.sent_at)}</span></div>
-                        <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>{o.items.map((it) => `${it.quantity} × ${it.name}`).join(" · ")}</div>
+                <div className="rp-items" style={{ padding: "12px 14px", display: "grid", gap: 12, alignContent: "start", gridAutoRows: "max-content" }}>
+                  {d.openOrders.map((o) => {
+                    const units = o.items.reduce((n, it) => n + it.quantity, 0);
+                    const long = o.items.length > 6;
+                    const isOpen = expanded[o.id] || !long;
+                    const list = isOpen ? o.items : o.items.slice(0, 5);
+                    return (
+                      <div key={o.id} className="rp-ocard">
+                        <div className="rp-ohead">
+                          <div style={{ minWidth: 0 }}>
+                            <div className="rp-oname">{o.supplier_name || "Sin proveedor"}</div>
+                            <div className="rp-ometa">
+                              Pedido #{o.id} · enviado {when(o.sent_at)} · <b>{o.items.length} {o.items.length === 1 ? "producto" : "productos"}</b> · {units} u.
+                            </div>
+                          </div>
+                          <span className="rp-pill" style={{ background: "#fff4e5", color: "#b45309", flexShrink: 0 }}>Esperando</span>
+                        </div>
+                        <div className="rp-olist">
+                          {list.map((it, k) => (
+                            <div key={k} className="rp-oline">
+                              <b>{it.quantity}</b>
+                              <span>{it.name}</span>
+                            </div>
+                          ))}
+                          {long && (
+                            <button className="rp-omore" onClick={() => setExpanded((e) => ({ ...e, [o.id]: !isOpen }))}>
+                              {isOpen ? "Ver menos ▴" : `Ver los ${o.items.length - 5} restantes ▾`}
+                            </button>
+                          )}
+                        </div>
+                        <div className="rp-oacts">
+                          {o.message_text && <button className="rp-btn" onClick={() => sendToGroup(o.message_text!)}>Reenviar al grupo</button>}
+                          <button className="rp-btn" onClick={() => close(o, "cancelled")}>Cancelar</button>
+                          <button className="rp-btn green" onClick={() => close(o, "received")}>✓ Llegó</button>
+                        </div>
                       </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {o.message_text && <button className="rp-btn" onClick={() => sendToGroup(o.message_text!)}>Reenviar</button>}
-                        <button className="rp-btn green" onClick={() => close(o, "received")}>Llegó</button>
-                        <button className="rp-btn" onClick={() => close(o, "cancelled")}>Cancelar</button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
