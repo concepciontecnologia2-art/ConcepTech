@@ -24,6 +24,7 @@ const SUBNAV: Record<string, { href: string; label: string; badge?: (b: Badges) 
   "/admin/proveedores": [
     { href: "/admin/proveedores", label: "Proveedores" },
     { href: "/admin/reposicion", label: "Pedidos a proveedores", badge: (b) => b.toReorder || null },
+    { href: "/admin/pedido-saphirus", label: "Pedido Saphirus 🔒" },
   ],
   "/admin/articulos": [
     { href: "/admin/articulos", label: "Artículos" },
@@ -235,7 +236,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const current = sectionOf(pathname);
   // Secciones que piden la clave de administrador (Sin foto es parte de modificar artículos)
   const needsAdmin = !!current?.adminOnly || !!pathname?.startsWith("/admin/sin-foto");
-  const needsOwner = !!current?.owner;  // Caja, Contabilidad y Usuarios: solo el dueño
+  const isSaphirus = !!pathname?.startsWith("/admin/pedido-saphirus");
+  const needsOwner = !!current?.owner || isSaphirus;  // Caja, Contabilidad, Usuarios y Pedido Saphirus: solo el dueño
   const blocked = needsOwner ? !admin?.owner : needsAdmin && !admin;
   // Pestañas internas: las de Proveedores las ve cualquiera; las de Tienda web y Artículos, con acceso de administrador
   const sub = current ? (current.href === "/admin/proveedores" || admin ? SUBNAV[current.href] : undefined) : undefined;
@@ -314,7 +316,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <main className="adm-wrap adm-main">
           {blocked
-            ? <AdminUnlock key={pathname} ownerOnly={needsOwner} section={pathname?.startsWith("/admin/sin-foto") ? "Artículos sin foto" : current!.label} />
+            ? <AdminUnlock key={pathname} ownerOnly={needsOwner} section={pathname?.startsWith("/admin/sin-foto") ? "Artículos sin foto" : isSaphirus ? "Pedido Saphirus" : current!.label} />
             : children}
         </main>
       </div>

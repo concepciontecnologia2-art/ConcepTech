@@ -2,19 +2,19 @@
 // ═══════════════════════════════════════════════════════════════════
 // CAJA — /admin/caja  (solo administrador)
 // Abrir y cerrar la caja, totales del turno, resumen del día,
-// ventas del turno (con anular), ingresos / retiros y el pedido a Saphirus.
+// ventas del turno (con anular) e ingresos / retiros.
 // Para vender se usa la sección Ventas.
-//   ?vista=ventas | ?vista=movimientos | ?vista=saphirus | ?cerrar=1
+//   ?vista=ventas | ?vista=movimientos | ?cerrar=1
+// (El pedido a Saphirus se mudó a Proveedores → Pedido Saphirus)
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import CajaResumen from "@/components/admin/CajaResumen";
-import SaphirusPedido from "@/components/admin/SaphirusPedido";
 import {
-  SalesList, Movements, CloseCash, OpenCash, Row, api, card, btn, seg, fmt, fmtDateTime, POS_CSS, type Summary,
+  SalesList, Movements, CloseCash, OpenCash, Row, api, card, btn, fmt, fmtDateTime, POS_CSS, type Summary,
 } from "@/components/admin/pos";
 
-type View = "resumen" | "ventas" | "movimientos" | "saphirus";
+type View = "resumen" | "ventas" | "movimientos";
 
 function Caja() {
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -55,7 +55,8 @@ function Caja() {
     deepLinkDone.current = true;
     const q = new URLSearchParams(window.location.search);
     const v = q.get("vista");
-    if (v === "ventas" || v === "movimientos" || v === "saphirus") setView(v);
+    if (v === "saphirus") { window.location.replace("/admin/pedido-saphirus"); return; }
+    if (v === "ventas" || v === "movimientos") setView(v);
     if (q.get("cerrar") === "1" && summary) setClosing(true);
     if (q.toString()) window.history.replaceState(null, "", "/admin/caja");
   }, [loading, summary]);
@@ -78,15 +79,11 @@ function Caja() {
     );
   }
 
-  // Caja cerrada: se puede abrir o igual armar el pedido a Saphirus
+  // Caja cerrada: solo se puede abrir
   if (!summary) return (
     <div>
       <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Caja</h1>
-      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
-        <button onClick={() => setView("resumen")} style={{ ...seg(view !== "saphirus"), flex: "0 0 auto", padding: "10px 14px" }}>Abrir caja</button>
-        <button onClick={() => setView("saphirus")} style={{ ...seg(view === "saphirus"), flex: "0 0 auto", padding: "10px 14px" }}>Pedido Saphirus</button>
-      </div>
-      {view === "saphirus" ? <SaphirusPedido /> : <OpenCash onOpened={changed} />}
+      <OpenCash onOpened={changed} />
     </div>
   );
 
@@ -100,7 +97,6 @@ function Caja() {
     { v: "resumen", label: "Resumen del día", icon: "M3 3v18h18 M7 15l4-4 3 3 6-7" },
     { v: "ventas", label: "Ventas del turno", icon: "M4 4h16v16H4z M8 9h8 M8 13h8 M8 17h5", count: summary.sales_count },
     { v: "movimientos", label: "Ingresos / retiros", icon: "M7 7h13l-4-4 M17 17H4l4 4" },
-    { v: "saphirus", label: "Pedido Saphirus", icon: "M9 3h6 M10 3v4l-4 6a6 6 0 0 0 12 0l-4-6V3" },
   ];
 
   return (
@@ -146,7 +142,6 @@ function Caja() {
         {view === "resumen" && <CajaResumen refreshKey={refreshKey} />}
         {view === "ventas" && <SalesList refreshKey={refreshKey} onChange={changed} canVoid />}
         {view === "movimientos" && <Movements refreshKey={refreshKey} onChange={changed} />}
-        {view === "saphirus" && <SaphirusPedido />}
       </section>
 
       {closing && (

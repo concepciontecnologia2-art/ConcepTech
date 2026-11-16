@@ -22,10 +22,10 @@ export type Section = {
 
 export const SECTIONS: Section[] = [
   { href: "/admin/ventas", label: "Ventas", desc: "Vender y cobrar", icon: "cart", color: "#0891b2" },
-  { href: "/admin/caja", label: "Caja", desc: "Abrir, cerrar, resumen y pedido Saphirus", icon: "register", color: "#059669", adminOnly: true, owner: true },
+  { href: "/admin/caja", label: "Caja", desc: "Abrir, cerrar y resumen del día", icon: "register", color: "#059669", adminOnly: true, owner: true },
   { href: "/admin/articulos", label: "Artículos", desc: "Precios, stock y fotos", icon: "box", color: "#d97706", match: ["/admin/productos", "/admin/sin-foto"] },
   { href: "/admin/clientes", label: "Clientes", desc: "Fichas e historial", icon: "users", color: "#7c3aed" },
-  { href: "/admin/proveedores", label: "Proveedores", desc: "Contactos y pedidos por WhatsApp", icon: "truck", color: "#4f46e5", match: ["/admin/reposicion"] },
+  { href: "/admin/proveedores", label: "Proveedores", desc: "Contactos y pedidos por WhatsApp", icon: "truck", color: "#4f46e5", match: ["/admin/reposicion", "/admin/pedido-saphirus"] },
   { href: "/admin/contabilidad", label: "Contabilidad", desc: "Ganancias, gastos y cierres", icon: "chart", color: "#db2777", adminOnly: true, owner: true },
   { href: "/admin/pedidos", label: "Tienda web", desc: "Pedidos de la página", icon: "globe", color: "#0284c7", adminOnly: true, match: ["/admin/resumen"] },
   { href: "/admin/compras", label: "Compras", desc: "Cargar facturas por foto", icon: "camera", color: "#0d9488", adminOnly: true, match: ["/admin/carga-stock"] },
@@ -37,7 +37,7 @@ export const visibleSections = (_role?: Role | null) => SECTIONS;
 
 /** Rutas donde el acceso de administrador sigue activo (al salir de ellas se bloquea) */
 export const keepsAdmin = (path: string | null | undefined) =>
-  !!path && (!!sectionOf(path)?.adminOnly || path.startsWith("/admin/articulos") || path.startsWith("/admin/sin-foto"));
+  !!path && (!!sectionOf(path)?.adminOnly || path.startsWith("/admin/articulos") || path.startsWith("/admin/sin-foto") || path.startsWith("/admin/pedido-saphirus"));
 
 export const sectionOf = (path: string | null | undefined): Section | null => {
   if (!path) return null;

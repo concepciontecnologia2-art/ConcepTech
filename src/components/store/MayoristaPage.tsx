@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const WA = process.env.NEXT_PUBLIC_WHATSAPP!;
@@ -84,6 +84,8 @@ function ProductImageCarousel({ productId, mainImage }: { productId:number; main
     </div>
   );
 }
+
+const BACK_KEY = "mayorista_volver";
 
 function InstallButton() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -217,17 +219,51 @@ export default function MayoristaPage({ initialProducts, categories }: { initial
     }
   },[]);
 
-  // EFECTO PARA RESTAURAR EL SCROLL AL VOLVER ATRÁS
+  // VOLVER AL PRODUCTO: al entrar a un producto se guarda cómo estaba el catálogo
+  // (categoría, búsqueda, orden, "Ver más" y dónde estaba la tarjeta). Al volver se
+  // restaura todo, sin la bienvenida, y se deja la tarjeta en el mismo lugar de la pantalla.
+  const restoreRef = useRef<any>(null);
   useEffect(() => {
-    if (!registered) return;
-    const savedScroll = sessionStorage.getItem("mayorista_scroll_pos");
-    if (savedScroll) {
-      setTimeout(() => {
-        window.scrollTo({ top: parseInt(savedScroll, 10), behavior: "instant" });
-        sessionStorage.removeItem("mayorista_scroll_pos");
-      }, 100);
-    }
+    let snap: any = null;
+    try { snap = JSON.parse(sessionStorage.getItem(BACK_KEY) || "null"); } catch {}
+    if (!snap || Date.now() - (snap.at || 0) > 6 * 60 * 60 * 1000) return;
+    setShowWelcome(false);
+    setActiveCat(snap.activeCat ?? null);
+    setSearch(snap.search || "");
+    if (snap.sort) setSort(snap.sort);
+    setVisible(snap.visible || {});
+    restoreRef.current = snap;
+  }, []);
+
+  useEffect(() => {
+    if (!registered || !restoreRef.current) return;
+    const snap = restoreRef.current; restoreRef.current = null;
+    try { sessionStorage.removeItem(BACK_KEY); } catch {}
+    const go = () => {
+      // Si el producto aparece en varios lugares, se elige la tarjeta más cercana a donde estaba
+      const els = Array.from(document.querySelectorAll<HTMLElement>(`[id="producto-${snap.id}"]`));
+      const want = (snap.y || 0) + (snap.top || 0);
+      let best: HTMLElement | null = null, diff = Infinity;
+      for (const el of els) {
+        const abs = el.getBoundingClientRect().top + window.scrollY;
+        if (Math.abs(abs - want) < diff) { diff = Math.abs(abs - want); best = el; }
+      }
+      const top = best ? best.getBoundingClientRect().top + window.scrollY - (snap.top || 0) : snap.y || 0;
+      window.scrollTo({ top: Math.max(0, top), behavior: "instant" as ScrollBehavior });
+    };
+    // Varias pasadas: las fotos y secciones terminan de acomodarse después del primer render
+    [30, 150, 400, 800].forEach((ms) => setTimeout(go, ms));
   }, [registered]);
+
+  const openProduct = (id: number, el?: HTMLElement | null) => {
+    try {
+      sessionStorage.setItem(BACK_KEY, JSON.stringify({
+        id, y: window.scrollY, top: el ? el.getBoundingClientRect().top : 0,
+        activeCat, search, sort, visible, at: Date.now(),
+      }));
+    } catch {}
+    router.push(`/mayorista/producto/${id}`);
+  };
 
   const handleRegister = async () => {
     if (!regForm.name||!regForm.phone) { setRegError("Completá todos los campos"); return; }
@@ -345,14 +381,8 @@ ${lines}
     const stockClass = st<=3 ? "stock-none" : st<=10 ? "stock-low" : "stock-ok";
     const stockText  = st===0 ? "🔴 Sin stock" : st<=3 ? `🔴 ${st} u.` : st<=10 ? `🟡 ${st} u.` : `🟢 ${st} u.`;
     
-    // GUARDAR POSICIÓN DE SCROLL ANTES DE NAVEGAR
-    const handleCardClick = () => {
-      sessionStorage.setItem("mayorista_scroll_pos", window.scrollY.toString());
-      router.push(`/mayorista/producto/${p.id}`);
-    };
-
     return (
-      <div id={`producto-${p.id}`} className={`pcard${inCart?" in-cart":""}`} onClick={handleCardClick}>
+      <div id={`producto-${p.id}`} className={`pcard${inCart?" in-cart":""}`} onClick={e=>openProduct(p.id, e.currentTarget)}>
         <button className="fav-btn" onClick={e=>{e.stopPropagation();toggleFav(p.id);}}>{esFav?"❤️":"🤍"}</button>
 
         <div style={{position:"relative"}}>
@@ -543,7 +573,7 @@ ${lines}
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                   {random.slice(0,4).map(p=>(
-                    <div key={p.id} onClick={()=>window.location.href=`/mayorista/producto/${p.id}`}
+                    <div key={p.id} onClick={()=>openProduct(p.id)}
                       style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,padding:14,backdropFilter:"blur(8px)",cursor:"pointer",transition:"background .2s"}}
                       onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.1)"}
                       onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.06)"}>
@@ -758,7 +788,7 @@ ${lines}
                         return (
                           <div key={p.id} style={{display:"flex",gap:10,alignItems:"center",padding:10,background:"#F9FAFB",borderRadius:12,border:"1px solid #E5E7EB"}}>
                             <img src={p.image_url||GENERIC} style={{width:48,height:48,objectFit:"cover",borderRadius:10,flexShrink:0}} loading="lazy" alt={p.name}/>
-                            <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>window.location.href=`/mayorista/producto/${p.id}`}>
+                            <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>openProduct(p.id)}>
                               <p style={{fontSize:12,fontWeight:600,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</p>
                               <p style={{fontSize:13,color:"#00B4D8",fontWeight:700}}>{fmt(Number(p.price_wholesale))}</p>
                             </div>
