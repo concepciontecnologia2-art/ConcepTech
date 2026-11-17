@@ -51,6 +51,10 @@ const CSS = `
   .ct{display:flex;flex-direction:column;gap:14px}
   .ct-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
   .ct-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .ct-copia{display:block;margin-top:6px;font-size:12px;font-weight:600}
+  .ct-copia.ok{color:#047857}
+  .ct-copia.mal{color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:5px 9px;border-radius:8px;width:fit-content;max-width:100%}
+  .ct-copia.gris{color:#9ca3af;font-weight:500}
   .ct-backup{margin-top:8px;padding:6px 12px;border-radius:9px;border:1px solid #bbf7d0;background:#f0fdf4;color:#047857;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
   .ct-backup:hover:not(:disabled){background:#dcfce7}
   .ct-backup:disabled{opacity:.6;cursor:default}
@@ -141,6 +145,22 @@ function DayChart({ data }: { data: Data["byDay"] }) {
   );
 }
 
+// Aviso de la copia automática: verde si se hizo en las últimas 36 h, rojo si no
+function EstadoCopia({ ultima }: { ultima: { at: string; bytes: number | null } | null | undefined }) {
+  if (ultima === undefined) return null; // todavía cargando o sin permiso
+  if (ultima === null) return <p className="ct-copia gris">Copia automática: todavía no se hizo ninguna.</p>;
+  const d = new Date(ultima.at);
+  const horas = (Date.now() - d.getTime()) / 36e5;
+  const tz = { timeZone: "America/Argentina/Tucuman" } as const;
+  const dia = d.toLocaleDateString("es-AR", { ...tz, day: "numeric", month: "numeric" });
+  const hoy = new Date().toLocaleDateString("es-AR", { ...tz, day: "numeric", month: "numeric" });
+  const ayer = new Date(Date.now() - 864e5).toLocaleDateString("es-AR", { ...tz, day: "numeric", month: "numeric" });
+  const hora = d.toLocaleTimeString("es-AR", { ...tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const cuando = dia === hoy ? `hoy ${hora}` : dia === ayer ? `ayer ${hora}` : `el ${dia} a las ${hora}`;
+  if (horas <= 36) return <p className="ct-copia ok" title="El sistema guarda una copia completa todas las noches y conserva el último mes">✓ Copia automática al día · última: {cuando}</p>;
+  return <p className="ct-copia mal">⚠ La copia automática no se hace desde {cuando}. Avisale a soporte.</p>;
+}
+
 export default function ContabilidadPage() {
   const [preset, setPreset] = useState<Preset>("mes");
   const [[desde, hasta], setRange] = useState<[string, string]>(() => rangeOf("mes"));
@@ -148,6 +168,14 @@ export default function ContabilidadPage() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [bajando, setBajando] = useState(false);
+  // Copia automática de todas las noches: cuándo fue la última
+  const [ultimaCopia, setUltimaCopia] = useState<{ at: string; bytes: number | null } | null | undefined>(undefined);
+  useEffect(() => {
+    fetch("/api/backup/estado", { credentials: "include", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setUltimaCopia(d ? d.ultimo : undefined))
+      .catch(() => {});
+  }, []);
 
   // Descargar copia: un Excel con una hoja por tema (artículos, clientes, ventas…)
   const descargarCopia = async () => {
@@ -213,6 +241,7 @@ export default function ContabilidadPage() {
           <button className="ct-backup" onClick={descargarCopia} disabled={bajando} title="Baja un Excel con artículos, clientes, proveedores, ventas, pedidos, caja y compras">
             {bajando ? "Preparando copia…" : "⬇ Descargar copia de mis datos"}
           </button>
+          <EstadoCopia ultima={ultimaCopia} />
         </div>
         <div className="ct-chips">
           {presets.map(([p, l]) => <button key={p} className={`ct-chip ${preset === p ? "on" : ""}`} onClick={() => pick(p)}>{l}</button>)}

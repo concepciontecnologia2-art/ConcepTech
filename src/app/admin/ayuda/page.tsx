@@ -206,6 +206,7 @@ const GUIA: Seccion[] = [
         "Tocá \"⬇ Descargar copia de mis datos\" debajo del título.",
         "Baja un Excel con artículos, clientes, proveedores, ventas, pedidos web, caja y compras.",
         "Además, el sistema hace solo una copia completa todas las noches y guarda el último mes.",
+        "Debajo del botón dice cuándo fue la última copia automática. Si aparece en rojo, avisale a soporte.",
       ]},
     ],
   },
