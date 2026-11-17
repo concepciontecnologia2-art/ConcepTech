@@ -3,7 +3,7 @@
 // ARTÍCULOS — vista de consulta para vendedores (sin modificar nada)
 // Buscar precio y stock rápido. Modificar artículos es solo del admin.
 // ═══════════════════════════════════════════════════════════════════
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type P = {
   id: number; name: string; sku: string | null; image_url: string | null; available: boolean;
@@ -14,7 +14,6 @@ const fmt = (n: number | string) => {
   const v = Number(n) || 0;
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 }).format(v);
 };
-const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 const CSS = `
   .ac-top{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
@@ -35,28 +34,47 @@ const CSS = `
 `;
 
 export default function ArticulosConsulta({ onEdit }: { onEdit?: () => void }) {
-  const [all, setAll] = useState<P[] | null>(null);
+  // Se piden de a 10 a la base; la búsqueda espera 350 ms después de la última letra
+  const PAGE = 10;
+  const [list, setList] = useState<P[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
+  const [qDeb, setQDeb] = useState("");
   const [cat, setCat] = useState("");
   const [onlyStock, setOnlyStock] = useState(false);
+  const [cats, setCats] = useState<string[]>([]);
   const ref = useRef<HTMLInputElement>(null);
+  const req = useRef(0);
 
   useEffect(() => {
-    fetch("/api/products", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => (Array.isArray(d) ? setAll(d) : setErr("No se pudieron cargar los artículos")))
-      .catch(() => setErr("No se pudieron cargar los artículos"));
+    fetch("/api/categories").then((r) => r.json())
+      .then((d) => Array.isArray(d) && setCats(d.map((c: { name: string }) => c.name).sort()))
+      .catch(() => {});
   }, []);
+  useEffect(() => { const t = setTimeout(() => setQDeb(q.trim()), 350); return () => clearTimeout(t); }, [q]);
 
-  const cats = useMemo(() => [...new Set((all || []).map((p) => p.category_name).filter(Boolean))].sort(), [all]);
-  const list = useMemo(() => {
-    const words = norm(q).split(/\s+/).filter(Boolean);
-    return (all || [])
-      .filter((p) => (!cat || p.category_name === cat) && (!onlyStock || p.stock_quantity > 0))
-      .filter((p) => words.every((w) => norm(`${p.name} ${p.sku || ""} ${p.id}`).includes(w)))
-      .slice(0, 200);
-  }, [all, q, cat, onlyStock]);
+  const load = useCallback(async (offset: number) => {
+    const my = ++req.current;
+    const sp = new URLSearchParams({ offset: String(offset), limit: String(PAGE) });
+    if (qDeb) sp.set("q", qDeb);
+    if (cat) sp.set("cat", cat);
+    if (onlyStock) sp.set("f", "constock");
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/products/lista?${sp}`, { credentials: "include", cache: "no-store" });
+      const d = await r.json().catch(() => null);
+      if (my !== req.current) return;           // llegó tarde: ya se pidió otra búsqueda
+      if (!r.ok || !d) { setErr("No se pudieron cargar los artículos"); return; }
+      setErr(""); setTotal(d.total); setLoaded(true);
+      setList((prev) => (offset ? [...prev, ...d.items] : d.items));
+    } catch { if (my === req.current) setErr("No se pudieron cargar los artículos"); }
+    finally { if (my === req.current) setLoading(false); }
+  }, [qDeb, cat, onlyStock]);
+  useEffect(() => { load(0); }, [load]);
+  const searching = loading || q.trim() !== qDeb;
 
   return (
     <div>
@@ -86,8 +104,8 @@ export default function ArticulosConsulta({ onEdit }: { onEdit?: () => void }) {
       </div>
       {err && <div className="ac-empty" style={{ color: "#ef4444" }}>{err}</div>}
       <div className="ac-list">
-        {all === null && !err && <div className="ac-empty">Cargando…</div>}
-        {all && list.length === 0 && <div className="ac-empty">No hay artículos con esa búsqueda.</div>}
+        {!loaded && !err && <div className="ac-empty">Cargando…</div>}
+        {loaded && !searching && list.length === 0 && <div className="ac-empty">No hay artículos con esa búsqueda.</div>}
         {list.map((p) => {
           const st = p.stock_quantity;
           const col = st <= 0 ? ["#b42318", "#fee4e2"] : st <= 3 ? ["#b45309", "#fff4e5"] : ["#047857", "rgba(16,185,129,.12)"];
@@ -110,7 +128,17 @@ export default function ArticulosConsulta({ onEdit }: { onEdit?: () => void }) {
           );
         })}
       </div>
-      {all && list.length === 200 && <p style={{ fontSize: 12, color: "#888", marginTop: 8 }}>Se muestran los primeros 200. Buscá para encontrar el resto.</p>}
+      {loaded && total > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <span style={{ fontSize: 12, color: "#888" }}>Mostrando {list.length} de {total}</span>
+          {list.length < total && (
+            <button onClick={() => load(list.length)} disabled={loading}
+              style={{ width: "100%", padding: 11, borderRadius: 10, border: "1px dashed #a5f3fc", background: "#f0fdff", color: "#0e7490", fontSize: 13, fontWeight: 600, cursor: loading ? "default" : "pointer", fontFamily: "inherit", opacity: loading ? 0.6 : 1 }}>
+              {loading ? "Cargando…" : `Mostrar ${Math.min(PAGE, total - list.length)} más`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -171,17 +171,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => { if (link) link.setAttribute("href", "/manifest.json"); };
   }, []);
 
-  // Contadores: se actualizan al cambiar de sección
-  const loadBadges = useCallback(() => {
+  // Contadores: al cambiar de sección se piden como mucho una vez cada 30 s;
+  // cuando algo cambia (pedido confirmado, foto subida…) se piden al instante.
+  const lastBadges = useRef(0);
+  const loadBadges = useCallback((force = true) => {
+    if (!force && Date.now() - lastBadges.current < 30_000) return;
+    lastBadges.current = Date.now();
     fetch("/api/admin/badges", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setBadges(d))
       .catch(() => {});
   }, []);
-  useEffect(() => { if (user) loadBadges(); }, [user, pathname, loadBadges]);
+  useEffect(() => { if (user) loadBadges(false); }, [user, pathname, loadBadges]);
   useEffect(() => {
-    window.addEventListener("admin:refresh-badges", loadBadges);
-    return () => window.removeEventListener("admin:refresh-badges", loadBadges);
+    const now = () => loadBadges(true);
+    window.addEventListener("admin:refresh-badges", now);
+    return () => window.removeEventListener("admin:refresh-badges", now);
   }, [loadBadges]);
 
   // Pantallas angostas: deja visible la pestaña de la sección actual

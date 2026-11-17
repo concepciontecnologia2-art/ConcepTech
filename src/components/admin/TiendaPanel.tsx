@@ -1,6 +1,6 @@
 "use client";
 // TIENDA PANEL — Artículos (lista + editar/agregar), Sin foto, Pedidos web y Resumen de la tienda.
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { uploadProductImage } from "@/lib/uploadImage";
 import { toWhatsApp } from "@/lib/phone";
 import { useRouter } from "next/navigation";
@@ -43,7 +43,14 @@ const NO_IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http
 export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNew?: boolean }) {
   const router = useRouter();
   const [orders, setOrders]         = useState<any[]>([]);
+  // Artículos: solo los que se ven en pantalla (se piden de a 10 a la base, no el catálogo entero)
   const [products, setProducts]     = useState<any[]>([]);
+  const [prodTotal, setProdTotal]   = useState(0);
+  const [prodCounts, setProdCounts] = useState<Record<string, number>>({});
+  const [prodLoading, setProdLoading] = useState(false);
+  const [qDeb, setQDeb]             = useState("");   // búsqueda "asentada" (espera a que termines de escribir)
+  const [dash, setDash]             = useState<{ low:any[]; lowTotal:number; counts:Record<string, number> }>({ low:[], lowTotal:0, counts:{} });
+  const listReq = useRef(0);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<number|null>(null);
@@ -60,8 +67,7 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
   const [loadingImages, setLoadingImages] = useState(false);
   const [importing, setImporting]   = useState(false);
   const [suppliersList, setSuppliersList] = useState<any[]>([]);
-  const [prodPage, setProdPage]     = useState(1);
-  const PRODS_PER_PAGE = 60;
+  const PAGE = tab==="sinfoto" ? 12 : 10;   // de a cuántos se muestran
 
   useEffect(()=>{ if(tab==="products") fetch("/api/crm/suppliers",{credentials:"include"}).then(r=>r.ok?r.json():[]).then(d=>Array.isArray(d)&&setSuppliersList(d)).catch(()=>{}); },[tab]);
 
@@ -128,12 +134,42 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     } catch {}
   }, []);
 
-  const fetchProducts = useCallback(async () => {
+  // Espera 350 ms después de la última letra antes de buscar (no consulta por cada tecla)
+  useEffect(()=>{ const t = setTimeout(()=>setQDeb(searchProd.trim()), 350); return ()=>clearTimeout(t); },[searchProd]);
+
+  const fetchList = useCallback(async (offset:number) => {
+    const my = ++listReq.current;
+    const sp = new URLSearchParams({ offset:String(offset), limit:String(PAGE) });
+    if (qDeb) sp.set("q", qDeb);
+    if (tab==="sinfoto") { sp.set("f","sinfoto"); sp.set("sort","stockdesc"); }
+    else { if (catFilter!=="all") sp.set("cat", catFilter); if (prodFilter!=="all") sp.set("f", prodFilter); }
+    setProdLoading(true);
     try {
-      const res = await fetch("/api/products",{credentials:"include"});
-      if(res.ok) { const d = await res.json(); setProducts(Array.isArray(d)?d:[]); }
+      const res = await fetch(`/api/products/lista?${sp}`,{credentials:"include",cache:"no-store"});
+      const d = await res.json().catch(()=>null);
+      if (my !== listReq.current || !res.ok || !d) return;   // llegó tarde (ya se pidió otra cosa)
+      setProducts(prev => offset ? [...prev, ...d.items] : d.items);
+      setProdTotal(d.total); setProdCounts(d.counts||{});
+    } catch {} finally { if (my === listReq.current) setProdLoading(false); }
+  }, [qDeb, tab, catFilter, prodFilter, PAGE]);
+  const fetchProducts = useCallback(() => fetchList(0), [fetchList]);
+  useEffect(()=>{ if (tab==="products" || tab==="sinfoto") fetchList(0); },[tab, fetchList]);
+
+  // Resumen: solo los 8 con menos stock y los contadores
+  const fetchDash = useCallback(async () => {
+    try {
+      const res = await fetch("/api/products/lista?f=bajo&sort=stock&limit=8",{credentials:"include",cache:"no-store"});
+      if (res.ok) { const d = await res.json(); setDash({ low:d.items, lowTotal:d.total, counts:d.counts||{} }); }
     } catch {}
   }, []);
+
+  // Catálogo completo: SOLO al exportar o importar Excel
+  const fetchAll = async ():Promise<any[]> => {
+    const res = await fetch("/api/products",{credentials:"include"});
+    const d = await res.json().catch(()=>null);
+    if (!res.ok || !Array.isArray(d)) throw new Error("No se pudo leer el catálogo");
+    return d;
+  };
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -142,15 +178,17 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     } catch {}
   }, []);
 
+  // Cada pestaña pide solo lo que muestra
   useEffect(() => {
     let isMounted = true;
-    Promise.all([fetchOrders(), fetchProducts()]).finally(() => { if (isMounted) setLoading(false); });
+    const jobs = tab==="dashboard" ? [fetchOrders(), fetchDash()] : tab==="orders" ? [fetchOrders()] : [];
+    Promise.all(jobs).finally(() => { if (isMounted) setLoading(false); });
     return () => { isMounted = false; };
-  }, [fetchOrders, fetchProducts]);
+  }, [tab, fetchOrders, fetchDash]);
 
   useEffect(() => {
-    if ((tab === "products" || form) && categories.length === 0) fetchCategories();
-  }, [tab, categories.length, fetchCategories, form]);
+    if ((tab === "products" || showAdjust || form) && categories.length === 0) fetchCategories();
+  }, [tab, categories.length, fetchCategories, form, showAdjust]);
 
   const patchOrder = async(id:number,data:any)=>{
     const res = await fetch(`/api/orders/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
@@ -163,6 +201,7 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     const res = await fetch(`/api/products/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
     if(!res.ok){ const d = await res.json().catch(()=>({})); alert(d.error||"No se pudo guardar el cambio"); return false; }
     setProducts(prev=>prev.map(p=>p.id===id?{...p,...data}:p));
+    window.dispatchEvent(new Event("admin:refresh-badges"));   // ej: "Sin foto" baja al subir una foto
     return true;
   };
 
@@ -213,13 +252,14 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
         const res = await fetch(`/api/products/${form.id}`,{method:"PUT",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
         const d = await res.json().catch(()=>({}));
         if(!res.ok){ alert(d.error||"No se pudo guardar el artículo"); return; }
-        setProducts(prev=>prev.map(p=>p.id===form.id?{...p,...payload,category_name:cat?.name||p.category_name}:p));
+        const sup = suppliersList.find((x:any)=>x.id===payload.supplier_id);
+        setProducts(prev=>prev.map(p=>p.id===form.id?{...p,...payload,category_name:cat?.name||p.category_name,supplier_name:sup?.name||null}:p));
       } else {
         try { localStorage.setItem("ct_pct_retail", form.pct_retail); localStorage.setItem("ct_pct_wholesale", form.pct_wholesale); } catch {}
         const res = await fetch("/api/products",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
         const p = await res.json().catch(()=>({}));
         if(!res.ok){ alert(p.error||"No se pudo guardar el artículo"); return; }
-        setProducts(prev=>[...prev,{...p,...payload,id:p.id,category_name:cat?.name||""}]);
+        fetchList(0);   // recarga la lista para que aparezca en su lugar
       }
       setForm(null);
     } finally { setSaving(false); }
@@ -230,6 +270,7 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     const res = await fetch(`/api/products/${id}`,{method:"DELETE",credentials:"include"});
     if(!res.ok){ alert("No se pudo eliminar (puede tener ventas asociadas). Podés ocultarlo de la tienda."); return false; }
     setProducts(prev=>prev.filter(p=>p.id!==id));
+    setProdTotal(t=>Math.max(0,t-1));
     return true;
   };
 
@@ -266,9 +307,11 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     setExtraImages(prev=>prev.filter(i=>i.id!==imageId));
   };
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const XLSX = require("xlsx");
-    const data = products.map((p:any)=>({
+    let all:any[] = [];
+    try { all = await fetchAll(); } catch(e:any) { alert(e.message); return; }
+    const data = all.map((p:any)=>({
       CODIGO:   "",
       DETALLE:   p.name,
       FAMILIA:   p.category_name||"",
@@ -344,7 +387,9 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
 
   // Construir mapa de productos existentes
   const prodMap = new Map<string, any>();
-  products.forEach((p:any) => {
+  let catalogo:any[] = [];
+  try { catalogo = await fetchAll(); } catch(e:any) { alert(e.message); setImporting(false); return; }
+  catalogo.forEach((p:any) => {
     const n = limpiarNombre(p.name);
     if (n !== "IGNORE_PRODUCT") prodMap.set(n, p);
   });
@@ -465,27 +510,20 @@ ${lines}
   const totalPaid    = orders.filter(o=>o.paid).reduce((s,o)=>s+Number(o.total),0);
   const totalPending = orders.filter(o=>!o.paid&&o.status!=="cancelled").reduce((s,o)=>s+Number(o.total),0);
   const pendingCount = orders.filter(o=>o.status==="pending").length;
-  const lowStock     = products.filter((p:any)=>qtyOf(p)<=3).sort((a,b)=>qtyOf(a)-qtyOf(b));
-  const sinFoto      = products.filter((p:any)=>!p.image_url);
-  const supName = (id:any) => suppliersList.find((s:any)=>s.id===Number(id))?.name || "";
-  const catNames = [...new Set(products.map((p:any)=>p.category_name).filter(Boolean))].sort() as string[];
+  const lowStock     = dash.low;
+  // En "Sin foto", el que ya tiene foto se saca de la lista al instante
+  const shownProds   = tab==="sinfoto" ? products.filter((p:any)=>!p.image_url) : products;
+  const hasMoreProds = products.length < prodTotal;
+  const catNames = categories.map((c:any)=>c.name).filter(Boolean).sort() as string[];
+  const searching = prodLoading || searchProd.trim() !== qDeb;
 
-  const PROD_FILTERS: [ProdFilter,string,(p:any)=>boolean][] = [
-    ["all","Todos",()=>true],
-    ["sinstock","Sin stock",p=>qtyOf(p)===0],
-    ["bajo","Stock bajo (1 a 3)",p=>qtyOf(p)>0&&qtyOf(p)<=3],
-    ["sinfoto","Sin foto",p=>!p.image_url],
-    ["ocultos","Ocultos en la web",p=>!p.available],
+  const PROD_FILTERS: [ProdFilter,string][] = [
+    ["all","Todos"],
+    ["sinstock","Sin stock"],
+    ["bajo","Stock bajo (1 a 3)"],
+    ["sinfoto","Sin foto"],
+    ["ocultos","Ocultos en la web"],
   ];
-  const pfTest = PROD_FILTERS.find(f=>f[0]===prodFilter)![2];
-  const q = searchProd.trim().toLowerCase();
-  const filteredProds = products
-    .filter((p:any)=>catFilter==="all"||p.category_name===catFilter)
-    .filter(pfTest)
-    .filter((p:any)=>!q || p.name.toLowerCase().includes(q) || String(p.sku||"").toLowerCase().includes(q))
-    .sort((a:any,b:any)=>a.name.localeCompare(b.name,"es"));
-  const filteredProdsPaged = filteredProds.slice(0, prodPage * PRODS_PER_PAGE);
-  const hasMoreProds = filteredProdsPaged.length < filteredProds.length;
 
   const ORD_FILTERS: [OrdFilter,string,(o:any)=>boolean][] = [
     ["all","Todos",()=>true],
@@ -537,7 +575,7 @@ ${lines}
               <div className="tp-kpi"><span>Cobrado</span><b style={{color:"#047857"}}>{fmt(totalPaid)}</b><small>pedidos marcados como pagados</small></div>
               <div className="tp-kpi"><span>Por cobrar</span><b style={{color:"#b45309"}}>{fmt(totalPending)}</b><small>{orders.filter(o=>!o.paid&&o.status!=="cancelled").length} pedidos sin pagar</small></div>
               <button className="tp-kpi link" onClick={()=>{router.push("/admin/pedidos");}}><span>Pedidos sin confirmar</span><b style={{color:"#1d4ed8"}}>{pendingCount}</b><small>de {orders.length} pedidos en total →</small></button>
-              <button className="tp-kpi link" onClick={()=>router.push("/admin/articulos?f=sinstock")}><span>Sin stock</span><b style={{color:"#b91c1c"}}>{products.filter(p=>qtyOf(p)===0).length}</b><small>{sinFoto.length} artículos sin foto</small></button>
+              <button className="tp-kpi link" onClick={()=>router.push("/admin/articulos?f=sinstock")}><span>Sin stock</span><b style={{color:"#b91c1c"}}>{dash.counts.sinstock ?? "–"}</b><small>{dash.counts.sinfoto ?? 0} artículos sin foto</small></button>
             </div>
 
             <div className="tp-dash">
@@ -564,7 +602,7 @@ ${lines}
 
               <section className="tp-card">
                 <div className="tp-card-h">
-                  <h3>Stock bajo <span className="tp-count red">{lowStock.length}</span></h3>
+                  <h3>Stock bajo <span className="tp-count red">{dash.lowTotal}</span></h3>
                   <button className="tp-btn sm" onClick={()=>router.push("/admin/articulos?f=bajo")}>Ver en Artículos</button>
                 </div>
                 {lowStock.length===0&&<p className="tp-empty">No hay artículos con stock bajo.</p>}
@@ -574,7 +612,7 @@ ${lines}
                     <Pill c={t.color} bg={t.bg}>{qtyOf(p)} u.</Pill>
                   </div>
                 );})}
-                {lowStock.length>8&&<p className="tp-more">y {lowStock.length-8} más…</p>}
+                {dash.lowTotal>8&&<p className="tp-more">y {dash.lowTotal-8} más…</p>}
               </section>
             </div>
           </div>
@@ -667,7 +705,7 @@ ${lines}
             <div className="tp-head">
               <div>
                 <h2 className="tp-title">Artículos</h2>
-                <p className="tp-sub">{products.length} artículos · {products.filter((p:any)=>p.available).length} visibles en la web · {products.filter(p=>qtyOf(p)===0).length} sin stock</p>
+                <p className="tp-sub">{catFilter==="all"&&!qDeb ? <>{prodCounts.all ?? "…"} artículos · {prodCounts.visibles ?? 0} visibles en la web · {prodCounts.sinstock ?? 0} sin stock</> : <>{prodCounts.all ?? 0} artículos con esa búsqueda</>}</p>
               </div>
               <div className="tp-actions">
                 <button className={`tp-btn${showAdjust?" on":""}`} onClick={()=>setShowAdjust(v=>!v)}>% Ajustar precios</button>
@@ -684,35 +722,28 @@ ${lines}
             {showAdjust&&(
               <PriceAdjuster
                 categories={categories}
-                products={products}
-                onAdjust={async(ids,pct)=>{
-                  for (let i = 0; i < ids.length; i += 8) {
-                    await Promise.all(ids.slice(i, i + 8).map(async(id)=>{
-                      const p = products.find((p:any)=>p.id===id);
-                      if(!p) return;
-                      const newRetail    = Math.round(Number(p.price_retail)    * (1+pct/100));
-                      const newWholesale = Math.round(Number(p.price_wholesale) * (1+pct/100));
-                      await fetch(`/api/products/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({price_retail:newRetail,price_wholesale:newWholesale})});
-                    }));
-                  }
+                onAdjust={async(target,pct)=>{
+                  const res = await fetch("/api/products/ajustar",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({...target,pct})});
+                  const d = await res.json().catch(()=>({}));
+                  if(!res.ok){ alert(d.error||"No se pudieron ajustar los precios"); return; }
                   await fetchProducts();
-                  alert(`Precios actualizados ${pct>0?"+":""}${pct}%`);
+                  alert(d.updated ? `Precios actualizados ${pct>0?"+":""}${pct}% en ${d.updated} ${d.updated===1?"artículo":"artículos"}` : "No había artículos para ajustar");
                 }}
               />
             )}
 
             <div className="tp-filters">
               <div className="tp-frow">
-                <input className="tp-search" value={searchProd} onChange={e=>{setSearchProd(e.target.value); setProdPage(1);}} placeholder="Buscar por nombre o código…"/>
-                <select className="tp-select" value={catFilter} onChange={e=>{setCatFilter(e.target.value); setProdPage(1);}}>
+                <input className="tp-search" value={searchProd} onChange={e=>setSearchProd(e.target.value)} placeholder="Buscar por nombre o código…"/>
+                <select className="tp-select" value={catFilter} onChange={e=>setCatFilter(e.target.value)}>
                   <option value="all">Todas las categorías</option>
                   {catNames.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div className="tp-chips">
-                {PROD_FILTERS.map(([k,l,t])=>(
-                  <button key={k} className={`tp-chip${prodFilter===k?" on":""}`} onClick={()=>{setProdFilter(k); setProdPage(1);}}>
-                    {l} <em>{products.filter(p=>catFilter==="all"||p.category_name===catFilter).filter(t).length}</em>
+                {PROD_FILTERS.map(([k,l])=>(
+                  <button key={k} className={`tp-chip${prodFilter===k?" on":""}`} onClick={()=>setProdFilter(k)}>
+                    {l} <em>{prodCounts[k] ?? ""}</em>
                   </button>
                 ))}
               </div>
@@ -722,7 +753,7 @@ ${lines}
               <div className="tp-prow tp-phead">
                 <span/><span>Artículo</span><span className="r">Minorista</span><span className="r">Mayorista</span><span className="c">Stock</span><span className="c">En la web</span><span/>
               </div>
-              {filteredProdsPaged.map((p:any)=>{
+              {shownProds.map((p:any)=>{
                 const qn = qtyOf(p), t = stockTag(qn);
                 return (
                   <div key={p.id} className={`tp-prow${p.available?"":" off"}`}>
@@ -733,7 +764,7 @@ ${lines}
                     </label>
                     <button className="tp-pname" onClick={()=>openEditForm(p)}>
                       <b>{p.name}</b>
-                      <small>{[p.sku && `Cód. ${p.sku}`, p.category_name, supName(p.supplier_id)].filter(Boolean).join(" · ")}</small>
+                      <small>{[p.sku && `Cód. ${p.sku}`, p.category_name, p.supplier_name].filter(Boolean).join(" · ")}</small>
                     </button>
                     <span className="tp-price r"><small className="m">Minorista</small>{fmt(Number(p.price_retail))}</span>
                     <span className="tp-price r wh"><small className="m">Mayorista</small>{fmt(Number(p.price_wholesale))}</span>
@@ -753,13 +784,10 @@ ${lines}
                   </div>
                 );
               })}
-              {filteredProds.length===0&&<p className="tp-empty pad">No hay artículos que coincidan.</p>}
+              {!searching&&products.length===0&&<p className="tp-empty pad">No hay artículos que coincidan.</p>}
+              {searching&&products.length===0&&<p className="tp-empty pad">Buscando…</p>}
             </div>
-            {hasMoreProds&&(
-              <button className="tp-loadmore" onClick={()=>setProdPage(p=>p+1)}>
-                Mostrar más ({filteredProds.length - filteredProdsPaged.length} restantes)
-              </button>
-            )}
+            <ListFooter shown={products.length} total={prodTotal} loading={prodLoading} more={hasMoreProds} step={PAGE} onMore={()=>fetchList(products.length)} />
           </div>
         )}
 
@@ -769,18 +797,15 @@ ${lines}
             <div className="tp-head">
               <div>
                 <h2 className="tp-title">Sin foto</h2>
-                <p className="tp-sub">{sinFoto.length} artículos sin imagen · tocá uno para subirle la foto</p>
+                <p className="tp-sub">{qDeb ? `${prodTotal} sin foto con esa búsqueda` : `${prodTotal} artículos sin imagen`} · tocá uno para subirle la foto</p>
               </div>
             </div>
             <div className="tp-filters">
               <input className="tp-search" value={searchProd} onChange={e=>setSearchProd(e.target.value)} placeholder="Buscar por nombre o código…"/>
             </div>
-            {sinFoto.length===0&&<p className="tp-empty">Todos los artículos tienen foto. 🎉</p>}
+            {!searching&&prodTotal===0&&<p className="tp-empty">{qDeb ? "No hay artículos sin foto con esa búsqueda." : "Todos los artículos tienen foto. 🎉"}</p>}
             <div className="tp-sfgrid">
-              {sinFoto
-                .filter((p:any)=>!q || p.name.toLowerCase().includes(q) || String(p.sku||"").toLowerCase().includes(q))
-                .sort((a:any,b:any)=>qtyOf(b)-qtyOf(a))
-                .map((p:any)=>{ const t = stockTag(qtyOf(p)); return (
+              {shownProds.map((p:any)=>{ const t = stockTag(qtyOf(p)); return (
                 <label key={p.id} className="tp-sf">
                   <span className="tp-sf-drop">
                     {uploadingId===p.id ? "Subiendo…" : <>
@@ -794,6 +819,7 @@ ${lines}
                 </label>
               );})}
             </div>
+            <ListFooter shown={products.length} total={prodTotal} loading={prodLoading} more={hasMoreProds} step={PAGE} onMore={()=>fetchList(products.length)} />
           </div>
         )}
 
@@ -1014,6 +1040,9 @@ const CSS = `
 .tp-toggle.on{background:#10b981}
 .tp-toggle.on i{left:19px}
 .tp-pacts{display:flex;justify-content:flex-end}
+.tp-foot{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:10px}
+.tp-foot>span{font-size:12px;color:#6b7280}
+.tp-loadmore:disabled{opacity:.6;cursor:default}
 .tp-loadmore{width:100%;margin-top:10px;padding:11px;border-radius:10px;border:1px dashed #a5f3fc;background:#f0fdff;color:#0e7490;font-size:13px;font-weight:600;cursor:pointer}
 
 /* Pedidos */
@@ -1179,7 +1208,19 @@ const CSS = `
 }
 `;
 
-function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; products:any[]; onAdjust:(ids:number[],pct:number)=>void }) {
+// Pie de las listas paginadas: "Mostrando 10 de 296 · Mostrar 10 más"
+function ListFooter({ shown, total, loading, more, step, onMore }: { shown:number; total:number; loading:boolean; more:boolean; step:number; onMore:()=>void }) {
+  if (!total) return null;
+  return (
+    <div className="tp-foot">
+      <span>Mostrando {shown} de {total}</span>
+      {more && <button className="tp-loadmore" onClick={onMore} disabled={loading}>{loading ? "Cargando…" : `Mostrar ${Math.min(step, total - shown)} más`}</button>}
+    </div>
+  );
+}
+
+type AdjustTarget = { category_id?: number; supplier_id?: number; product_id?: number };
+function PriceAdjuster({ categories, onAdjust }: { categories:any[]; onAdjust:(target:AdjustTarget,pct:number)=>Promise<void> }) {
   const [mode, setMode]         = useState<"category"|"supplier"|"product">("category");
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [supId, setSupId]       = useState("");
@@ -1190,31 +1231,41 @@ function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; p
   const [pct, setPct]           = useState("");
   const [loading, setLoading]   = useState(false);
 
-  const filtered = (products||[]).filter((p:any)=>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  ).slice(0,8);
+  // Buscar producto: espera a que termines de escribir y trae 8 de la base
+  const [filtered, setFiltered] = useState<any[]>([]);
+  useEffect(()=>{
+    const term = search.trim();
+    if (mode!=="product" || !term || selected) { setFiltered([]); return; }
+    let vivo = true;
+    const t = setTimeout(()=>{
+      fetch(`/api/products/lista?limit=8&q=${encodeURIComponent(term)}`,{credentials:"include"})
+        .then(r=>r.ok?r.json():null).then(d=>{ if(vivo && d) setFiltered(d.items); }).catch(()=>{});
+    }, 350);
+    return ()=>{ vivo=false; clearTimeout(t); };
+  },[search, mode, selected]);
 
   const handle = async() => {
     const n = Number(pct);
     if (!pct||isNaN(n)||n===0) { alert("Ingresá un porcentaje válido"); return; }
-    let ids: number[] = [];
+    let target: AdjustTarget = {};
     let label = "";
     if (mode==="category") {
-      ids = catId==="all" ? products.map((p:any)=>p.id) : products.filter((p:any)=>String(p.category_id)===catId).map((p:any)=>p.id);
-      label = catId==="all" ? "todas las categorías" : categories.find((c:any)=>c.id===Number(catId))?.name;
+      if (catId!=="all") target = { category_id: Number(catId) };
+      label = catId==="all" ? "TODOS los artículos" : `la categoría ${categories.find((c:any)=>c.id===Number(catId))?.name}`;
     } else if (mode==="supplier") {
       if (!supId) { alert("Elegí un proveedor"); return; }
-      ids = products.filter((p:any)=>String(p.supplier_id)===supId).map((p:any)=>p.id);
-      if (!ids.length) { alert("Ese proveedor no tiene productos asignados"); return; }
-      label = `los ${ids.length} productos de ${suppliers.find((x:any)=>String(x.id)===supId)?.name}`;
+      const sup = suppliers.find((x:any)=>String(x.id)===supId);
+      if (!sup?.products) { alert("Ese proveedor no tiene productos asignados"); return; }
+      target = { supplier_id: Number(supId) };
+      label = `los ${sup.products} productos de ${sup.name}`;
     } else {
       if (!selected) { alert("Seleccioná un producto"); return; }
-      ids = [selected];
-      label = products.find((p:any)=>p.id===selected)?.name;
+      target = { product_id: selected };
+      label = search;
     }
     if (!confirm(`¿Ajustar precios ${n>0?"+":""}${n}% en ${label}?`)) return;
     setLoading(true);
-    await onAdjust(ids, n);
+    await onAdjust(target, n);
     setPct(""); setSearch(""); setSelected(null);
     setLoading(false);
   };
@@ -1244,7 +1295,7 @@ function PriceAdjuster({ categories, products, onAdjust }: { categories:any[]; p
             style={{padding:"8px 10px",background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:7,color:"#1a1a1a",fontSize:13,outline:"none",fontFamily:"inherit",minWidth:220}}>
             <option value="">Elegí un proveedor…</option>
             {suppliers.map((x:any)=>{
-              const n = products.filter((p:any)=>p.supplier_id===x.id).length;
+              const n = Number(x.products) || 0;
               return <option key={x.id} value={x.id}>{x.name} ({n} {n===1?"producto":"productos"})</option>;
             })}
           </select>

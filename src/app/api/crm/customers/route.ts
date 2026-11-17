@@ -1,4 +1,5 @@
 // GET  ?q=juan&type=retail|wholesale&estado=activos|inactivos → lista de clientes con lo que compraron
+//      ?q=juan&limit=8 → modo buscador (rápido, sin estadísticas)
 // POST { name, phone, email, dni_cuit, address, city, customer_type, notes } → alta de cliente
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
@@ -21,6 +22,21 @@ export async function GET(req: NextRequest) {
       params.push(likeTerm(t));
       const i = params.length;
       conds.push(`(c.name ILIKE $${i} OR COALESCE(c.city,'') ILIKE $${i} OR COALESCE(c.phone,'') ILIKE $${i} OR COALESCE(c.dni_cuit,'') ILIKE $${i} OR COALESCE(c.email,'') ILIKE $${i})`);
+    }
+
+    // Modo buscador (?limit=8): para los selectores de cliente. Trae solo esos pocos,
+    // sin sumar el historial de ventas de todos los clientes.
+    const pick = Number(sp.get("limit"));
+    if (pick > 0) {
+      const { rows } = await pool.query(
+        `SELECT c.id, c.name, c.phone, c.email, c.dni_cuit, c.address, c.city, c.customer_type, c.active
+         FROM customers c
+         WHERE ${conds.join(" AND ")}
+         ORDER BY c.name
+         LIMIT ${Math.min(20, Math.trunc(pick))}`,
+        params
+      );
+      return NextResponse.json(rows);
     }
 
     const { rows } = await pool.query(

@@ -176,7 +176,7 @@ export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: nu
     const full = toWhatsApp(q);
     const term = full ? full.slice(-8) : /\d/.test(q) ? digits(q).replace(/^0/, "").slice(-8) : q;
     const t = setTimeout(() => {
-      api(`/api/crm/customers?q=${encodeURIComponent(term)}`)
+      api(`/api/crm/customers?limit=12&q=${encodeURIComponent(term)}`)
         .then((rows: any[]) => setFound(rows.filter((r) => r.phone).slice(0, 6).map((r) => ({ phone: r.phone, name: r.name, customer_id: r.id }))))
         .catch(() => {});
     }, 250);

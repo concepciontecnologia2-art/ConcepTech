@@ -32,7 +32,7 @@ export default function CustomerPicker({ value, onChange }: { value: PickedCusto
   useEffect(() => {
     if (!q.trim()) { setRes([]); return; }
     const t = setTimeout(() => {
-      api(`/api/crm/customers?q=${encodeURIComponent(q.trim())}`)
+      api(`/api/crm/customers?limit=8&q=${encodeURIComponent(q.trim())}`)
         .then((rows) => { setRes(rows.slice(0, 6)); setHi(0); })
         .catch(() => setRes([]));
     }, 200);
