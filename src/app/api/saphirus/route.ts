@@ -1,4 +1,4 @@
-// PEDIDO SAPHIRUS — solo el dueño (Caja → Pedido Saphirus)
+// PEDIDO SAPHIRUS — sección propia del menú; la usa cualquier usuario con sesión
 // GET  ?supplier=ID → proveedores Saphirus, sus productos con stock y los últimos pedidos
 //   Productos de Saphirus = los que tienen ese proveedor, o "Saphirus" en el nombre o la categoría.
 // POST { supplier_id, items: [{ product_id?, name?, quantity }], note?, message? }
@@ -6,12 +6,12 @@
 //   Los renglones sin product_id son "libres" (aromas o productos que no están cargados).
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { requireOwner, errorResponse, withTransaction, PosError } from "@/lib/pos";
+import { requireUser, errorResponse, withTransaction, PosError } from "@/lib/pos";
 import { buildGroupMessage, REORDER_AT, SAPHIRUS_LIKE, groupUrl } from "@/lib/reposicion";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const unauth = requireOwner(req); if (unauth) return unauth;
+  const unauth = requireUser(req); if (unauth) return unauth;
   try {
     const { rows: suppliers } = await pool.query(
       `SELECT id, name, contact_name, whatsapp FROM suppliers
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const unauth = requireOwner(req); if (unauth) return unauth;
+  const unauth = requireUser(req); if (unauth) return unauth;
   try {
     const b = await req.json().catch(() => ({}));
     const supplierId = Number(b.supplier_id);

@@ -25,8 +25,9 @@ export const SECTIONS: Section[] = [
   { href: "/admin/caja", label: "Caja", desc: "Abrir, cerrar y resumen del día", icon: "register", color: "#059669", adminOnly: true, owner: true },
   { href: "/admin/articulos", label: "Artículos", desc: "Precios, stock y fotos", icon: "box", color: "#d97706", match: ["/admin/productos", "/admin/sin-foto"] },
   { href: "/admin/clientes", label: "Clientes", desc: "Fichas e historial", icon: "users", color: "#7c3aed" },
-  { href: "/admin/proveedores", label: "Proveedores", desc: "Contactos y pedidos por WhatsApp", icon: "truck", color: "#4f46e5", match: ["/admin/reposicion", "/admin/pedido-saphirus"] },
+  { href: "/admin/proveedores", label: "Proveedores", desc: "Contactos y pedidos por WhatsApp", icon: "truck", color: "#4f46e5", match: ["/admin/reposicion"] },
   { href: "/admin/contabilidad", label: "Contabilidad", desc: "Ganancias, gastos y cierres", icon: "chart", color: "#db2777", adminOnly: true, owner: true },
+  { href: "/admin/pedido-saphirus", label: "Saphirus", desc: "Armar el pedido de aromas", icon: "drop", color: "#db2777" },
   { href: "/admin/pedidos", label: "Tienda web", desc: "Pedidos de la página", icon: "globe", color: "#0284c7", adminOnly: true, match: ["/admin/resumen"] },
   { href: "/admin/compras", label: "Compras", desc: "Cargar facturas por foto", icon: "camera", color: "#0d9488", adminOnly: true, match: ["/admin/carga-stock"] },
   { href: "/admin/usuarios", label: "Usuarios", desc: "Vendedores y permisos", icon: "lock", color: "#475569", adminOnly: true, owner: true },
@@ -37,7 +38,7 @@ export const visibleSections = (_role?: Role | null) => SECTIONS;
 
 /** Rutas donde el acceso de administrador sigue activo (al salir de ellas se bloquea) */
 export const keepsAdmin = (path: string | null | undefined) =>
-  !!path && (!!sectionOf(path)?.adminOnly || path.startsWith("/admin/articulos") || path.startsWith("/admin/sin-foto") || path.startsWith("/admin/pedido-saphirus"));
+  !!path && (!!sectionOf(path)?.adminOnly || path.startsWith("/admin/articulos") || path.startsWith("/admin/sin-foto"));
 
 export const sectionOf = (path: string | null | undefined): Section | null => {
   if (!path) return null;
@@ -55,5 +56,6 @@ export const ICONS = {
   globe: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M2 12h20 M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
   camera: "M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
   lock: "M4 11h16v10H4z M8 11V7a4 4 0 0 1 8 0v4",
+  drop: "M12 3c3.5 4.2 6 7.6 6 10.8A6 6 0 0 1 6 13.8C6 10.6 8.5 7.2 12 3z M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5",
   home: "M3 11l9-8 9 8 M5 10v10h14V10",
 } as const;
