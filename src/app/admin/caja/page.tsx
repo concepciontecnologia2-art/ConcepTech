@@ -5,7 +5,7 @@
 // ventas del turno (con anular) e ingresos / retiros.
 // Para vender se usa la sección Ventas.
 //   ?vista=ventas | ?vista=movimientos | ?cerrar=1
-// (El pedido a Saphirus se mudó a Proveedores → Pedido Saphirus)
+// (El pedido a Saphirus se mudó a su propia sección (Saphirus))
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";

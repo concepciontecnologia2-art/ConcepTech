@@ -21,7 +21,7 @@ export function suggestedQty(stock: number, minStock: number) {
 export type OrderLine = { name: string; sku?: string | null; quantity: number };
 
 // ─── SAPHIRUS ───────────────────────────────────────────────────────
-// Los proveedores cuyo nombre contiene "Saphirus" se manejan aparte, en Caja → Pedido Saphirus
+// Los proveedores cuyo nombre contiene "Saphirus" se manejan aparte, en su propia sección (Saphirus)
 // (solo el dueño). No aparecen en "Pedidos a proveedores" para no pedir dos veces.
 export const SAPHIRUS_LIKE = "%saphirus%";
 /** SQL: true si el proveedor con ese alias de tabla es Saphirus */

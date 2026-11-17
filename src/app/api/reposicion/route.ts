@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
            ORDER BY o.sent_at DESC LIMIT 1
          ) po ON TRUE
          WHERE p.stock_quantity <= $1
-           AND NOT COALESCE(${isSaphirusSql("s")}, FALSE)   -- Saphirus va en Caja → Pedido Saphirus
+           AND NOT COALESCE(${isSaphirusSql("s")}, FALSE)   -- Saphirus tiene su propia sección
          ORDER BY s.name NULLS LAST, p.stock_quantity, p.name`,
         [REORDER_AT]
       ),

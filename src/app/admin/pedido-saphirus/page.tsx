@@ -1,6 +1,5 @@
 "use client";
-// PEDIDO SAPHIRUS — /admin/pedido-saphirus (Proveedores → Pedido Saphirus, solo el dueño).
-// El layout pide la clave del dueño antes de mostrar esta pantalla.
+// PEDIDO SAPHIRUS — /admin/pedido-saphirus. Sección propia del menú, sin clave.
 import SaphirusPedido from "@/components/admin/SaphirusPedido";
 
 export default function PedidoSaphirusPage() {

@@ -53,6 +53,9 @@ const BASE_CSS = `
   .adm-role.admin{color:#0891b2}
   .adm-out{padding:7px 14px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;color:#444;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
   .adm-out:hover{background:#e9ebee}
+  .adm-help{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;color:#0e7490;font-size:13px;font-weight:600;text-decoration:none}
+  .adm-help:hover,.adm-help.on{background:#ecfeff;border-color:#a5f3fc}
+  @media(max-width:700px){.adm-help .txt{display:none}.adm-help{padding:7px 9px}}
 
   /* ── Barra de secciones ── */
   .adm-nav{background:#fff;border-bottom:1px solid #e5e7eb}
@@ -267,6 +270,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <b>{user.name}</b>
                   <span className={`adm-role ${user.role}`}>{user.role === "admin" ? "Administrador" : "Vendedor"}</span>
                 </div>
+                <Link href="/admin/ayuda" className={`adm-help${pathname?.startsWith("/admin/ayuda") ? " on" : ""}`} title="Ayuda y guía de uso">
+                  <SectionIcon name="help" size={15} /><span className="txt">Ayuda</span>
+                </Link>
                 <button onClick={logout} className="adm-out">Salir</button>
               </div>
             </div>
@@ -277,7 +283,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <nav className="adm-nav" aria-label="Secciones">
               <div className="adm-wrap adm-tabs">
                 <Link href="/admin" className="adm-tab adm-home" title="Inicio"><span className="ico"><SectionIcon name="home" size={17} /></span></Link>
-                {sections.map((s) => {
+                {sections.filter((s) => !s.noTab).map((s) => {
                   const active = current?.href === s.href;
                   return (
                     <Link key={s.href} href={s.href} className={`adm-tab ${active ? "active" : ""} ${s.soon ? "soon" : ""}`}>

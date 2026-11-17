@@ -51,6 +51,9 @@ const CSS = `
   .ct{display:flex;flex-direction:column;gap:14px}
   .ct-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
   .ct-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .ct-backup{margin-top:8px;padding:6px 12px;border-radius:9px;border:1px solid #bbf7d0;background:#f0fdf4;color:#047857;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+  .ct-backup:hover:not(:disabled){background:#dcfce7}
+  .ct-backup:disabled{opacity:.6;cursor:default}
   .ct-chip{padding:7px 12px;border-radius:9px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:600;font-family:inherit;color:#555;cursor:pointer}
   .ct-chip.on{border-color:rgba(0,180,216,.5);background:rgba(0,180,216,.1);color:#0891b2}
   .ct-date{padding:6px 9px;border:1px solid #e5e7eb;border-radius:9px;font-family:inherit;font-size:13px;background:#fff}
@@ -144,6 +147,38 @@ export default function ContabilidadPage() {
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bajando, setBajando] = useState(false);
+
+  // Descargar copia: un Excel con una hoja por tema (artículos, clientes, ventas…)
+  const descargarCopia = async () => {
+    if (bajando) return;
+    setBajando(true);
+    try {
+      const r = await fetch("/api/backup", { credentials: "include", cache: "no-store" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "No se pudo generar la copia");
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+      // Números como número (para poder sumar en Excel) y fechas como fecha; códigos y teléfonos quedan como texto
+      const TEXTO = new Set(["codigo", "telefono", "whatsapp", "dni_cuit", "cuit", "numero"]);
+      const fix = (k: string, v: unknown) => {
+        if (typeof v !== "string" || TEXTO.has(k)) return v;
+        if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+        if (/^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(v);
+        return v;
+      };
+      for (const [name, raw] of Object.entries(d.sheets as Record<string, Record<string, unknown>[]>)) {
+        const rows = raw.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, fix(k, v)])));
+        const ws = rows.length ? XLSX.utils.json_to_sheet(rows, { dateNF: "dd/mm/yyyy hh:mm" }) : XLSX.utils.aoa_to_sheet([["(sin datos)"]]);
+        if (rows.length) ws["!cols"] = Object.keys(rows[0]).map((k) => ({ wch: Math.min(40, Math.max(10, k.length + 2)) }));
+        XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+      }
+      const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Tucuman" });
+      XLSX.writeFile(wb, `copia-concepcion-tecnologia-${hoy}.xlsx`);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "No se pudo generar la copia");
+    } finally { setBajando(false); }
+  };
   const [capOpen, setCapOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -175,6 +210,9 @@ export default function ContabilidadPage() {
             {desde === hasta ? dayLabel(desde, true) : `Del ${dayLabel(desde, true)} al ${dayLabel(hasta, true)}`}
             {loading && " · actualizando…"}
           </p>
+          <button className="ct-backup" onClick={descargarCopia} disabled={bajando} title="Baja un Excel con artículos, clientes, proveedores, ventas, pedidos, caja y compras">
+            {bajando ? "Preparando copia…" : "⬇ Descargar copia de mis datos"}
+          </button>
         </div>
         <div className="ct-chips">
           {presets.map(([p, l]) => <button key={p} className={`ct-chip ${preset === p ? "on" : ""}`} onClick={() => pick(p)}>{l}</button>)}

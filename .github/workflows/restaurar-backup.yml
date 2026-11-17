@@ -1,0 +1,78 @@
+# ═══════════════════════════════════════════════════════════════════
+# RESTAURAR UNA COPIA DE SEGURIDAD (manual)
+# Carga una copia diaria en una RAMA APARTE de Neon, nunca directo en main.
+# Ahí se revisa que esté todo bien y recién después se decide qué hacer.
+#
+# Antes de usarlo:
+#   1. En Neon, crear una rama nueva (ej: "restaurado") desde main.
+#   2. Copiar su conexión y guardarla en GitHub como secreto RESTORE_DATABASE_URL.
+#
+# Uso: Actions → Restaurar copia de seguridad → Run workflow
+#   - run_id: el número de la copia que querés (figura en el resumen de cada copia diaria)
+#   - confirmar: escribir RESTAURAR
+# ═══════════════════════════════════════════════════════════════════
+name: Restaurar copia de seguridad
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Número de la ejecución de la copia diaria a restaurar"
+        required: true
+      confirmar:
+        description: "Escribí RESTAURAR para confirmar"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  restaurar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Controles de seguridad
+        env:
+          RESTORE_URL: ${{ secrets.RESTORE_DATABASE_URL }}
+          MAIN_URL: ${{ secrets.DATABASE_URL }}
+          CONFIRMAR: ${{ inputs.confirmar }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          if [ "$CONFIRMAR" != "RESTAURAR" ]; then echo "::error::Escribí RESTAURAR (en mayúsculas) para confirmar."; exit 1; fi
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then echo "::error::El número de ejecución tiene que ser solo números."; exit 1; fi
+          if [ -z "$RESTORE_URL" ]; then echo "::error::Falta el secreto RESTORE_DATABASE_URL (la rama de Neon donde restaurar)."; exit 1; fi
+          host() { echo "$1" | sed -E 's#^[a-z]+://[^@]*@([^/:?]+).*#\1#; s/-pooler\././'; }
+          if [ -n "$MAIN_URL" ] && [ "$(host "$RESTORE_URL")" = "$(host "$MAIN_URL")" ]; then
+            echo "::error::RESTORE_DATABASE_URL apunta a la misma base que producción. Usá una rama aparte de Neon."
+            exit 1
+          fi
+          DIRECT_URL=$(echo "$RESTORE_URL" | sed 's/-pooler\././')
+          echo "::add-mask::$DIRECT_URL"
+          echo "DIRECT_URL=$DIRECT_URL" >> "$GITHUB_ENV"
+
+      - name: Bajar la copia
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: backup-*
+          merge-multiple: true
+          path: copia
+
+      - name: Instalar cliente de Postgres (misma versión que Neon)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client postgresql-common >/dev/null
+          MAJOR=$(psql "$DIRECT_URL" -Atc "SELECT current_setting('server_version_num')::int / 10000")
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq "postgresql-client-$MAJOR" >/dev/null
+          echo "PGBIN=/usr/lib/postgresql/$MAJOR/bin" >> "$GITHUB_ENV"
+
+      - name: Restaurar en la rama aparte
+        run: |
+          FILE=$(ls copia/*.dump | head -1)
+          echo "Restaurando $FILE"
+          "$PGBIN/pg_restore" --dbname="$DIRECT_URL" --clean --if-exists --no-owner --no-privileges --single-transaction "$FILE"
+          echo "### Copia restaurada en la rama aparte" >> "$GITHUB_STEP_SUMMARY"
+          "$PGBIN/psql" "$DIRECT_URL" -Atc "SELECT 'Artículos: ' || count(*) FROM products UNION ALL SELECT 'Ventas: ' || count(*) FROM sales UNION ALL SELECT 'Clientes: ' || count(*) FROM customers" | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"

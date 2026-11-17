@@ -18,6 +18,7 @@ export type Section = {
   owner?: boolean;
   soon?: boolean;
   match?: string[];     // otras rutas que pertenecen a esta sección
+  noTab?: boolean;      // no va en el menú de arriba (se llega por un botón propio), sí en el inicio
 };
 
 export const SECTIONS: Section[] = [
@@ -31,6 +32,7 @@ export const SECTIONS: Section[] = [
   { href: "/admin/pedidos", label: "Tienda web", desc: "Pedidos de la página", icon: "globe", color: "#0284c7", adminOnly: true, match: ["/admin/resumen"] },
   { href: "/admin/compras", label: "Compras", desc: "Cargar facturas por foto", icon: "camera", color: "#0d9488", adminOnly: true, match: ["/admin/carga-stock"] },
   { href: "/admin/usuarios", label: "Usuarios", desc: "Vendedores y permisos", icon: "lock", color: "#475569", adminOnly: true, owner: true },
+  { href: "/admin/ayuda", label: "Ayuda", desc: "Guía de uso y atajos", icon: "help", color: "#0e7490", noTab: true },
 ];
 
 // Todos ven todas las secciones; las de administrador muestran un candado
@@ -58,4 +60,5 @@ export const ICONS = {
   lock: "M4 11h16v10H4z M8 11V7a4 4 0 0 1 8 0v4",
   drop: "M12 3c3.5 4.2 6 7.6 6 10.8A6 6 0 0 1 6 13.8C6 10.6 8.5 7.2 12 3z M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5",
   home: "M3 11l9-8 9 8 M5 10v10h14V10",
+  help: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5 M12 17.5h.01",
 } as const;

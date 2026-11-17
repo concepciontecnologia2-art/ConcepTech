@@ -1,0 +1,83 @@
+# ═══════════════════════════════════════════════════════════════════
+# COPIA DE SEGURIDAD DIARIA DE LA BASE (Neon)
+# Corre todas las noches a las 3:00 (hora Argentina) y guarda la copia
+# como archivo descargable en GitHub → Actions → "Copia de seguridad diaria".
+# Se guardan las últimas 30 copias; las más viejas se borran solas.
+#
+# Necesita UN secreto en GitHub (Settings → Secrets and variables → Actions):
+#   DATABASE_URL = la conexión de Neon de la rama main (la misma que usa Vercel)
+#
+# También se puede correr a mano: Actions → Copia de seguridad diaria → Run workflow.
+# Si falla, GitHub manda un mail al dueño del repositorio.
+# ═══════════════════════════════════════════════════════════════════
+name: Copia de seguridad diaria
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC = 03:00 en Argentina
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-diario
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Preparar conexión
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Falta el secreto DATABASE_URL (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          # pg_dump necesita la conexión directa, no la del pooler de Neon
+          DIRECT_URL=$(echo "$DATABASE_URL" | sed 's/-pooler\././')
+          echo "::add-mask::$DIRECT_URL"
+          echo "DIRECT_URL=$DIRECT_URL" >> "$GITHUB_ENV"
+
+      - name: Instalar cliente de Postgres (misma versión que Neon)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client postgresql-common >/dev/null
+          MAJOR=$(psql "$DIRECT_URL" -Atc "SELECT current_setting('server_version_num')::int / 10000")
+          echo "Postgres en Neon: versión $MAJOR"
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq "postgresql-client-$MAJOR" >/dev/null
+          echo "PGBIN=/usr/lib/postgresql/$MAJOR/bin" >> "$GITHUB_ENV"
+
+      - name: Sacar la copia
+        run: |
+          FECHA=$(TZ=America/Argentina/Tucuman date +%Y-%m-%d_%H%M)
+          FILE="backup-$FECHA.dump"
+          "$PGBIN/pg_dump" "$DIRECT_URL" --format=custom --no-owner --no-privileges --file="$FILE"
+          # Control: el archivo tiene que tener las tablas principales
+          TABLAS=$("$PGBIN/pg_restore" --list "$FILE" | grep -c "TABLE DATA" || true)
+          if [ "$TABLAS" -lt 5 ]; then
+            echo "::error::La copia salió incompleta ($TABLAS tablas)."
+            exit 1
+          fi
+          echo "Copia OK: $TABLAS tablas, $(du -h "$FILE" | cut -f1)"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          echo "FECHA=$FECHA" >> "$GITHUB_ENV"
+          {
+            echo "### Copia de seguridad $FECHA"
+            echo "- Tablas: $TABLAS"
+            echo "- Tamaño: $(du -h "$FILE" | cut -f1)"
+            echo "- Para restaurar: Actions → **Restaurar copia de seguridad** → Run workflow, con el número de esta ejecución: \`${{ github.run_id }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar la copia (30 días)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ env.FECHA }}
+          path: ${{ env.FILE }}
+          retention-days: 30
+          compression-level: 0   # el formato de pg_dump ya viene comprimido
+          if-no-files-found: error

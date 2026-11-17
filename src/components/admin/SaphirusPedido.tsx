@@ -1,6 +1,6 @@
 "use client";
 // ═══════════════════════════════════════════════════════════════════
-// PEDIDO SAPHIRUS — Caja → Pedido Saphirus (solo el dueño)
+// PEDIDO SAPHIRUS — sección propia del menú (/admin/pedido-saphirus), la usa cualquier usuario
 // Se arma el pedido con los productos de Saphirus cargados (con su stock)
 // y/o renglones libres (aromas que no están cargados), y se manda por
 // WhatsApp al GRUPO del negocio. El borrador queda guardado en esta compu.
