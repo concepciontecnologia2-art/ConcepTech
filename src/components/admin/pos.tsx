@@ -15,6 +15,17 @@ export const fmt = (n: number) => {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: dec, maximumFractionDigits: dec }).format(v);
 };
 export const fmtTime = (s: string) => new Date(s).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+// Día + hora corto (24 h): "Hoy 11:45", "Ayer 21:11" o "16/11 20:57"
+const AR = "America/Argentina/Tucuman";
+const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: AR });
+export const fmtWhen = (s: string) => {
+  const d = new Date(s);
+  const hora = d.toLocaleTimeString("es-AR", { timeZone: AR, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const k = dayKey(d), hoy = dayKey(new Date()), ayer = dayKey(new Date(Date.now() - 864e5));
+  if (k === hoy) return `Hoy ${hora}`;
+  if (k === ayer) return `Ayer ${hora}`;
+  return `${d.toLocaleDateString("es-AR", { timeZone: AR, day: "2-digit", month: "2-digit" })} ${hora}`;
+};
 export const fmtDateTime = (s: string) =>
   new Date(s).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 export const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -790,7 +801,7 @@ export function SalesList({ refreshKey, onChange, canVoid }: { refreshKey: numbe
                 <div className="sl-row" onClick={() => setOpen(isOpen ? null : x.id)} role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === "Enter") setOpen(isOpen ? null : x.id); }}>
                   <span className="sl-id">#{x.id}</span>
-                  <span className="sl-muted">{fmtTime(x.created_at)}</span>
+                  <span className="sl-muted" title={new Date(x.created_at).toLocaleString("es-AR")}>{fmtWhen(x.created_at)}</span>
                   <span className="sl-cli">
                     {x.customer_name || <i>Consumidor final</i>}
                     {x.price_list === "wholesale" && <em>May.</em>}
@@ -904,7 +915,7 @@ export function Movements({ refreshKey, onChange }: { refreshKey: number; onChan
           <div key={m.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderBottom: "1px solid #f3f4f6" }}>
             <div>
               <p style={{ fontSize: 13, fontWeight: 600 }}>{m.reason}</p>
-              <p style={{ fontSize: 11, color: "#888" }}>{fmtTime(m.created_at)} · {m.method === "cash" ? "Efectivo" : "Transferencia"}</p>
+              <p style={{ fontSize: 11, color: "#888" }}>{fmtWhen(m.created_at)} · {m.method === "cash" ? "Efectivo" : "Transferencia"}</p>
             </div>
             <span style={{ fontWeight: 700, color: m.type === "income" ? "#059669" : "#d97706" }}>
               {m.type === "income" ? "+" : "−"} {fmt(m.amount)}
@@ -1043,7 +1054,7 @@ export const POS_CSS = `
   .sl-sum small{font-size:11px;color:#98a2b3}
   .sl-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
   .sl-table{border:1px solid #eef0f3;border-radius:10px;overflow:hidden}
-  .sl-row{display:grid;grid-template-columns:56px 82px minmax(0,1.4fr) minmax(0,1.4fr) 100px 104px 170px;gap:10px;align-items:center;padding:9px 12px;font-size:13px;cursor:pointer}
+  .sl-row{display:grid;grid-template-columns:56px 96px minmax(0,1.4fr) minmax(0,1.4fr) 100px 104px 170px;gap:10px;align-items:center;padding:9px 12px;font-size:13px;cursor:pointer}
   .sl-th{background:#fafbfc;font-size:11px;font-weight:700;color:#98a2b3;text-transform:uppercase;letter-spacing:.03em;cursor:default;border-bottom:1px solid #eef0f3}
   .sl-item{border-bottom:1px solid #f3f4f6}
   .sl-item:last-child{border-bottom:0}

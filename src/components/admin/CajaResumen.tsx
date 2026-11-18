@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { fmtWhen } from "@/components/admin/pos";
 
 const AC = "#6366f1";
 const AC_DARK = "#4f46e5";
@@ -20,7 +21,6 @@ const fmt = (n: number) => {
 };
 const fmtShort = (n: number) =>
   n >= 1000 ? "$ " + new Intl.NumberFormat("es-AR", { notation: "compact", maximumFractionDigits: 1 }).format(n) : fmt(n);
-const fmtTime = (s: string) => new Date(s).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
 type Dash = {
   caja: null | {
     session: { opened_at: string; opening_amount: number };
@@ -325,7 +325,7 @@ export default function CajaResumen({ refreshKey = 0 }: { refreshKey?: number })
               const extra = (s.lines || 0) > 1 ? ` y ${(s.lines || 0) - 1} más` : "";
               return (
                 <div key={s.id} className={`lc-tr ${s.status === "voided" ? "voided" : ""}`}>
-                  <span className="lc-td-time">{fmtTime(s.created_at)}</span>
+                  <span className="lc-td-time">{fmtWhen(s.created_at)}</span>
                   <span className="lc-td-main">
                     <span className="lc-td-item">{s.first_item || `Venta #${s.id}`}{extra}</span>
                     <span className="lc-td-sub">

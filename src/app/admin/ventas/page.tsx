@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { SaleScreen, SalesList, api, card, seg, fmtTime, POS_CSS } from "@/components/admin/pos";
+import { SaleScreen, SalesList, api, card, seg, fmtWhen, POS_CSS } from "@/components/admin/pos";
 
 type View = "venta" | "ventas";
 type SessionInfo = { id: number; opened_at: string } | null;
@@ -73,7 +73,7 @@ function Ventas() {
       <aside className="caja-side">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>Ventas</h1>
-          <span className="state on" style={{ marginTop: 6 }}><span className="dot" />Caja abierta · {fmtTime(session.opened_at)}</span>
+          <span className="state on" style={{ marginTop: 6 }}><span className="dot" />Caja abierta · {fmtWhen(session.opened_at)}</span>
         </div>
 
         <div className="caja-views">
