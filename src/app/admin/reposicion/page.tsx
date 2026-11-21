@@ -81,7 +81,7 @@ const CSS = `
   .rp-row:hover{background:#fcfcfd}
   .rp-row.off{opacity:.5}
   .rp-img{width:36px;height:36px;border-radius:8px;object-fit:cover;background:#f3f4f6}
-  .rp-pname{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rp-pname{font-size:13px;font-weight:600;line-height:1.35;white-space:normal;overflow-wrap:anywhere}  /* nombre completo, en varias líneas si hace falta */
   .rp-meta{font-size:11px;color:#9ca3af;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rp-stock{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
   .rp-qty{display:flex;align-items:center;gap:4px}
