@@ -32,7 +32,10 @@ function niceName(raw: string) {
 
 type Line = {
   key: number;
-  raw: string;
+  raw: string;            // como figura en la factura
+  es?: string;            // nombre en castellano (traducido por la IA)
+  byAi?: boolean;         // la IA decidió que es el mismo artículo aunque esté escrito distinto
+  merged?: number;        // cuántos renglones repetidos de la factura se juntaron en este
   code: string | null;
   quantity: string;
   unit_cost: string;
@@ -62,6 +65,12 @@ const api = async (url: string, opts: RequestInit = {}) => {
 const CSS = `
   .cp{display:flex;flex-direction:column;gap:14px;max-width:1200px}
   .cp-tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .cp-usd{display:grid;gap:10px;padding:14px 18px}
+  .cp-usd.on{background:#fffbeb;border-color:#fcd34d}
+  .cp-usd-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .cp-usd-in{position:relative;display:inline-block;width:170px}
+  .cp-usd-in i{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-style:normal;color:#9ca3af;font-size:14px}
+  .cp-usd-in input{padding-left:24px;font-size:16px;font-weight:700}
   .cp-newbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:#f0fdf4;border-color:#bbf7d0;font-size:13px}
   .cp-tab{padding:8px 14px;border-radius:9px;border:1px solid #e5e7eb;background:#fff;font-size:13px;font-weight:700;color:#555;cursor:pointer;font-family:inherit}
   .cp-tab.on{border-color:rgba(0,180,216,.5);background:rgba(0,180,216,.1);color:#0891b2}
@@ -222,6 +231,11 @@ export default function ComprasPage() {
   const [date, setDate] = useState("");
   const [invoiceTotal, setInvoiceTotal] = useState<number | null>(null);
   const [addIva, setAddIva] = useState(false);
+  // Facturas en dólares (ej. proveedores de Paraguay): los costos se pasan a pesos con el valor que se cargue
+  const [currency, setCurrency] = useState<"ARS" | "USD">("ARS");
+  const [dolar, setDolar] = useState("");
+  const [lastDolar, setLastDolar] = useState("");
+  const [mergedCount, setMergedCount] = useState(0);
   const [priceMode, setPriceMode] = useState<"keep" | "pct">("keep");
   const [rPct, setRPct] = useState("");
   const [wPct, setWPct] = useState("");
@@ -233,7 +247,11 @@ export default function ComprasPage() {
   useEffect(() => {
     api("/api/crm/suppliers").then(setSuppliers).catch(() => {});
     fetch("/api/categories").then((r) => r.json()).then((d) => Array.isArray(d) && setCategories(d)).catch(() => {});
-    try { setRPct(localStorage.getItem("ct_pct_retail") || ""); setWPct(localStorage.getItem("ct_pct_wholesale") || ""); } catch {}
+    // Ganancia por defecto: 135 % minorista y 30 % mayorista (o lo último que se usó)
+    try {
+      setRPct(localStorage.getItem("ct_pct_retail") || "135"); setWPct(localStorage.getItem("ct_pct_wholesale") || "30");
+      setLastDolar(localStorage.getItem("ct_dolar") || "");
+    } catch { setRPct("135"); setWPct("30"); }
   }, []);
 
   const loadHistory = useCallback(() => { api("/api/compras").then(setHistory).catch((e) => setErr(e.message)); }, []);
@@ -251,6 +269,7 @@ export default function ComprasPage() {
   const reset = () => {
     setStep("subir"); setFiles([]); setLines([]); setRaw(null); setErr(""); setResult(null);
     setSupplierId(""); setNumber(""); setDate(""); setInvoiceTotal(null); setAddIva(false);
+    setCurrency("ARS"); setDolar(""); setMergedCount(0);
   };
 
   const read = async () => {
@@ -264,14 +283,16 @@ export default function ComprasPage() {
       if (d.supplier) setSupplierId(String(d.supplier.id));
       setNumber(d.invoice.numero || ""); setDate(d.invoice.fecha || ""); setInvoiceTotal(d.invoice.total);
       setAddIva(!!d.invoice.iva_discriminado);
+      setCurrency(d.invoice.moneda === "USD" ? "USD" : "ARS"); setDolar("");
+      setMergedCount(d.merged || 0);
       setRaw(d.raw);
       setLines(d.lines.map((l: any) => ({
-        key: keySeq++, raw: l.descripcion, code: l.codigo,
+        key: keySeq++, raw: l.descripcion, es: l.nombre_es || l.descripcion, byAi: !!l.match_by_ai, merged: l.merged || 1, code: l.codigo,
         quantity: String(l.cantidad), unit_cost: l.precio_unitario != null ? String(l.precio_unitario) : "",
         product: l.product_id ? { id: l.product_id, name: l.matches.find((m: Match) => m.id === l.product_id)?.name || "" } : null,
         matches: l.matches, update_cost: true,
         // Lo que no está en el sistema se carga como ARTÍCULO NUEVO con el nombre de la factura
-        create: l.product_id ? null : { name: niceName(l.descripcion), category_id: l.suggested_category_id ? String(l.suggested_category_id) : "", sku: l.codigo || "", ai: !!l.category_by_ai },
+        create: l.product_id ? null : { name: niceName(l.nombre_es || l.descripcion), category_id: l.suggested_category_id ? String(l.suggested_category_id) : "", sku: l.codigo || "", ai: !!l.category_by_ai },
       })));
       if (!d.lines.length) setErr("La IA no encontró productos en la foto. Probá con una foto más clara o cargalos a mano.");
       setStep("revisar");
@@ -287,7 +308,10 @@ export default function ComprasPage() {
 
   // Totales
   const ivaMul = addIva ? 1.21 : 1;
-  const costTotal = lines.reduce((s, l) => s + num(l.quantity) * num(l.unit_cost), 0);
+  const isUsd = currency === "USD";
+  const rate = isUsd ? num(dolar) : 1;          // pesos por dólar
+  const costTotalOrig = lines.reduce((s, l) => s + num(l.quantity) * num(l.unit_cost), 0);   // en la moneda de la factura
+  const costTotal = costTotalOrig * rate;
   const units = lines.reduce((s, l) => s + (parseInt(l.quantity) || 0), 0);
   const pending = lines.filter((l) => !l.product && !l.create).length;
   const newCount = lines.filter((l) => l.create).length;
@@ -296,24 +320,31 @@ export default function ComprasPage() {
   const pctOk = !needsPct || (rPct !== "" && wPct !== "");
 
   const confirm_ = async () => {
+    if (isUsd && !(rate > 0)) { setErr("La factura está en dólares: cargá arriba el valor del dólar en pesos."); return; }
     if (pending) { setErr(`Faltan ${pending} renglones por emparejar (en rojo).`); return; }
     if (lines.some((l) => l.create && l.create.name.trim().length < 2)) { setErr("Hay un artículo nuevo sin nombre."); return; }
     if (newNoCat) { setErr(`Elegí la categoría de ${newNoCat === 1 ? "1 artículo nuevo" : `${newNoCat} artículos nuevos`} (en rojo).`); return; }
     if (!pctOk) { setErr(newCount && priceMode === "keep" ? "Completá los % de ganancia para ponerle precio a los artículos nuevos." : "Completá los % de ganancia."); return; }
     setBusy(true); setErr("");
     try {
-      try { if (needsPct) { localStorage.setItem("ct_pct_retail", rPct); localStorage.setItem("ct_pct_wholesale", wPct); } } catch {}
+      try {
+        if (needsPct) { localStorage.setItem("ct_pct_retail", rPct); localStorage.setItem("ct_pct_wholesale", wPct); }
+        if (isUsd) localStorage.setItem("ct_dolar", dolar);
+      } catch {}
       const r = await api("/api/compras", {
         method: "POST",
         body: JSON.stringify({
-          supplier_id: supplierId || null, invoice_number: number || null, invoice_date: date || null, total: invoiceTotal,
+          supplier_id: supplierId || null, invoice_number: number || null, invoice_date: date || null,
+          total: invoiceTotal != null && isUsd ? Math.round(invoiceTotal * rate * 100) / 100 : invoiceTotal,   // siempre en pesos
           ai_raw: raw, iva_pct: addIva ? 21 : 0,
+          notes: isUsd ? `Factura en dólares · US$ 1 = ${fmt(rate)}` : undefined,
           prices: { mode: priceMode, retail_pct: num(rPct), wholesale_pct: num(wPct) },
           close_orders: closeOrders,
           lines: lines.map((l) => ({
             raw_description: l.raw || l.create?.name || l.product?.name || "",
             quantity: parseInt(l.quantity) || 0,
-            unit_cost: l.unit_cost === "" ? null : num(l.unit_cost),
+            // en pesos: si la factura es en dólares se multiplica por el valor cargado
+            unit_cost: l.unit_cost === "" ? null : Math.round(num(l.unit_cost) * rate * 100) / 100,
             product_id: l.create ? null : l.product?.id,
             create: l.create ? { name: l.create.name, category_id: Number(l.create.category_id), sku: l.create.sku || null } : null,
             update_cost: l.update_cost,
@@ -413,6 +444,26 @@ export default function ComprasPage() {
       {/* ── 2. REVISAR ── */}
       {tab === "nueva" && step === "revisar" && (
         <>
+          <div className={`cp-card cp-usd${isUsd ? " on" : ""}`}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
+              <input type="checkbox" checked={isUsd} onChange={(e) => setCurrency(e.target.checked ? "USD" : "ARS")} style={{ accentColor: "#d97706", width: 16, height: 16 }} />
+              Los precios de esta factura están en <b>dólares (US$)</b>
+            </label>
+            {isUsd && (
+              <div className="cp-usd-row">
+                <label className="cp-lbl" style={{ margin: 0 }}>VALOR DEL DÓLAR EN PESOS</label>
+                <span className="cp-usd-in">
+                  <i>$</i>
+                  <input className="cp-in" value={dolar} onChange={(e) => { setDolar(e.target.value.replace(/[^\d.,]/g, "")); setErr(""); }} inputMode="decimal"
+                    placeholder={lastDolar ? `último: ${lastDolar}` : "Ej: 1500"} autoFocus style={!(rate > 0) ? { borderColor: "#f59e0b" } : undefined} />
+                </span>
+                <span className="cp-note">
+                  {rate > 0 ? <>Total factura: <b>US$ {costTotalOrig.toLocaleString("es-AR", { maximumFractionDigits: 2 })}</b> = <b>{fmt(Math.round(costTotal * 100) / 100)}</b></>
+                            : "Cargalo para pasar los costos a pesos. La IA detectó que la factura está en dólares."}
+                </span>
+              </div>
+            )}
+          </div>
           <div className="cp-card" style={{ display: "grid", gap: 12 }}>
             <div className="cp-grid2" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
               <div>
@@ -446,6 +497,12 @@ export default function ComprasPage() {
             </div>
           </div>
 
+          {(mergedCount > 0 || lines.some((l) => l.byAi)) && (
+            <div className="cp-ok">
+              {mergedCount > 0 && <>Se juntaron <b>{mergedCount}</b> {mergedCount === 1 ? "renglón repetido" : "renglones repetidos"} de la factura (mismo producto) para no duplicar. </>}
+              {lines.some((l) => l.byAi) && <><b>{lines.filter((l) => l.byAi).length}</b> {lines.filter((l) => l.byAi).length === 1 ? "producto se reconoció" : "productos se reconocieron"} como artículos que ya tenés aunque estén escritos distinto (✨). Revisalos.</>}
+            </div>
+          )}
           {newCount > 0 && (
             <div className="cp-card cp-newbar">
               <div>
@@ -465,15 +522,21 @@ export default function ComprasPage() {
           <div className="cp-card">
             <div className="cp-lines">
               <div className="cp-line cp-line-h">
-                <span>Lo que dice la factura</span><span>Cant.</span><span>Costo unit.</span><span>Artículo del sistema</span><span />
+                <span>Lo que dice la factura</span><span>Cant.</span><span>{isUsd ? "Costo unit. (US$)" : "Costo unit."}</span><span>Artículo del sistema</span><span />
               </div>
               {lines.map((l) => {
-                const cost = num(l.unit_cost) * ivaMul;
+                const cost = num(l.unit_cost) * rate * ivaMul;
                 return (
                   <div key={l.key} className="cp-line">
                     <div>
                       {l.raw ? (
-                        <div className="cp-raw">{l.raw}{l.code && <small>Código: {l.code}</small>}</div>
+                        <div className="cp-raw">
+                          {l.es || l.raw}
+                          {l.es && l.es !== l.raw && <small>En la factura: {l.raw}</small>}
+                          {l.code && <small>Código: {l.code}</small>}
+                          {l.byAi && l.product && <span className="cp-chip" style={{ background: "#ecfeff", color: "#0e7490" }}>✨ Mismo producto según la IA</span>}
+                          {(l.merged || 1) > 1 && <span className="cp-chip" style={{ background: "#f0fdf4", color: "#047857", marginLeft: 4 }}>{l.merged} renglones juntados</span>}
+                        </div>
                       ) : (
                         <input className="cp-in" placeholder="Descripción (opcional)" value={l.raw} onChange={(e) => upd(l.key, { raw: e.target.value })} />
                       )}
@@ -485,8 +548,9 @@ export default function ComprasPage() {
                     </div>
                     <input className="cp-in" value={l.quantity} inputMode="numeric" onChange={(e) => upd(l.key, { quantity: e.target.value.replace(/\D/g, "") })} />
                     <div>
-                      <input className="cp-in" value={l.unit_cost} inputMode="decimal" placeholder="$" onChange={(e) => upd(l.key, { unit_cost: e.target.value })} />
-                      {addIva && num(l.unit_cost) > 0 && <small className="cp-note">con IVA {fmt(Math.round(cost * 100) / 100)}</small>}
+                      <input className="cp-in" value={l.unit_cost} inputMode="decimal" placeholder={isUsd ? "US$" : "$"} onChange={(e) => upd(l.key, { unit_cost: e.target.value })} />
+                      {isUsd && num(l.unit_cost) > 0 && <small className="cp-note" style={{ display: "block" }}>{rate > 0 ? `= ${fmt(Math.round(cost * 100) / 100)}` : "falta el dólar"}</small>}
+                      {!isUsd && addIva && num(l.unit_cost) > 0 && <small className="cp-note">con IVA {fmt(Math.round(cost * 100) / 100)}</small>}
                     </div>
                     <ProductPicker line={l} categories={categories}
                       onPick={(p) => upd(l.key, { product: p, create: null })}
@@ -506,8 +570,9 @@ export default function ComprasPage() {
           <div className="cp-card cp-sum">
             <div style={{ display: "grid", gap: 4 }}>
               <span className="cp-note">{lines.length} renglones · {units} unidades{pending > 0 && <b style={{ color: "#b91c1c", fontSize: 13 }}> · faltan {pending} por emparejar</b>}</span>
-              <span>Costo total{addIva ? " (con IVA)" : ""}: <b>{fmt(Math.round(costTotal * ivaMul * 100) / 100)}</b>
-                {invoiceTotal != null && <span className="cp-note"> · la factura dice {fmt(invoiceTotal)}</span>}</span>
+              <span>Costo total{addIva ? " (con IVA)" : ""}: <b>{isUsd && !(rate > 0) ? "—" : fmt(Math.round(costTotal * ivaMul * 100) / 100)}</b>
+                {isUsd && <span className="cp-note"> · US$ {costTotalOrig.toLocaleString("es-AR", { maximumFractionDigits: 2 })}</span>}
+                {invoiceTotal != null && <span className="cp-note"> · la factura dice {isUsd ? `US$ ${invoiceTotal.toLocaleString("es-AR")}` : fmt(invoiceTotal)}</span>}</span>
               {supplierId && (
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#444", cursor: "pointer" }}>
                   <input type="checkbox" checked={closeOrders} onChange={(e) => setCloseOrders(e.target.checked)} style={{ accentColor: "#10b981" }} />

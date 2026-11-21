@@ -13,7 +13,21 @@ export const normText = (s: string) =>
     .replace(/(\d)\s*(w|mah|gb|tb|mm|cm|m|v|a|hz)\b/g, "$1$2")   // "25 w" → "25w"
     .replace(/[^a-z0-9]+/g, " ").trim();
 
-const tokens = (s: string) => normText(s).split(" ").filter((t) => t.length > 1 && !STOP.has(t));
+// Sinónimos y abreviaturas (también portugués): se comparan como si fueran la misma palabra.
+// "" = palabra que no suma nada a la comparación (se ignora).
+const SYN: Record<string, string> = {
+  sam: "samsung", sams: "samsung", moto: "motorola", mot: "motorola", xiaomi: "xiaomi", redmi: "redmi",
+  bat: "bateria", batt: "bateria", battery: "bateria",
+  frontal: "modulo", pantalla: "modulo", display: "modulo", lcd: "modulo", tela: "modulo",
+  tampa: "tapa", conec: "conector", conect: "conector", pin: "conector",
+  ori: "original", orig: "original", premium: "premium",
+  preto: "", preta: "", black: "negro", com: "", sem: "sin",
+  cinza: "gris", grey: "gris", gray: "gris", branco: "blanco", white: "blanco", red: "rojo", vermelho: "rojo", blue: "azul",
+  grafite: "grafito", graphite: "grafito",
+};
+const COLORES = new Set(["negro", "blanco", "rojo", "azul", "gris", "grafito", "verde", "rosa", "dorado", "plateado", "violeta", "amarillo", "celeste", "lila", "naranja"]);
+const tokens = (s: string) =>
+  normText(s).split(" ").map((t) => (t in SYN ? SYN[t] : t)).filter((t) => t.length > 1 && !STOP.has(t));
 
 /** Devuelve los mejores artículos para una línea de la factura (score de 0 a 1) */
 export function bestMatches(desc: string, code: string | null, products: Candidate[], supplierId: number | null, limit = 3) {
@@ -41,6 +55,9 @@ export function bestMatches(desc: string, code: string | null, products: Candida
       // Modelos distintos (iPhone 14 vs 15, A54 vs A34, 20W vs 25W): casi seguro es otro producto
       const conflicts = pt.filter((t) => /\d/.test(t) && !dset.has(t)).length;
       if (conflicts && dt.some((t) => /\d/.test(t))) score *= Math.pow(0.5, conflicts);
+      // Colores distintos (tapa azul vs tapa roja): es otro producto
+      const pc = pt.filter((t) => COLORES.has(t)), dc = dt.filter((t) => COLORES.has(t));
+      if (pc.length && dc.length && !pc.some((c) => dc.includes(c))) score *= 0.3;
       if (supplierId && p.supplier_id === supplierId) score = Math.min(1, score + 0.08);
     }
     if (score >= 0.25) out.push({ id: p.id, name: p.name, score: Math.round(score * 100) / 100 });

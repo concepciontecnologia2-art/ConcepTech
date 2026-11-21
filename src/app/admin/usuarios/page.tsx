@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useAdminAccess } from "@/components/admin/session";
+import PasswordInput from "@/components/PasswordInput";
 
 type U = { id: number; username: string; display_name: string; role: "admin" | "vendedor"; active: boolean; last_login_at: string | null; created_at: string };
 
@@ -88,7 +89,7 @@ function UserForm({ initial, onClose, onSaved }: { initial: U | null; onClose: (
         </div>
         <div>
           <label className="us-lbl">{initial ? "NUEVA CONTRASEÑA (dejala vacía para no cambiarla)" : "CONTRASEÑA (mínimo 6 caracteres)"}</label>
-          <input className="us-in" type="password" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+          <PasswordInput className="us-in" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
         </div>
         <div>
           <label className="us-lbl">PERMISOS</label>

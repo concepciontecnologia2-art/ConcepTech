@@ -404,6 +404,9 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
   useEffect(() => { setAutoTicket(readAutoTicket()); }, []);
   const searchRef = useRef<HTMLInputElement>(null);
   const reqId = useRef(0);
+  // Después de agregar, la búsqueda queda escrita (y seleccionada) y la lista se oculta
+  // para no tapar el carrito; Enter, ↓ o un clic la vuelven a mostrar.
+  const [showRes, setShowRes] = useState(true);
 
   // Búsqueda con debounce
   useEffect(() => {
@@ -432,9 +435,10 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
       if (ex) return c.map((l) => (l.product.id === p.id ? { ...l, quantity: l.quantity + 1 } : l));
       return [...c, { product: p, quantity: 1 }];
     });
-    setQ(""); setResults([]);
+    setShowRes(false);
     setLastAdded(p.id);
     searchRef.current?.focus();
+    setTimeout(() => searchRef.current?.select(), 0);   // escribir algo nuevo reemplaza la búsqueda
   };
 
   // Al agregar un producto, la lista baja hasta ese renglón y lo resalta un momento
@@ -462,6 +466,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
   const canCharge = cart.length > 0 && !busy && (change === null || change >= 0);
 
   const reset = () => {
+    setQ(""); setResults([]); setShowRes(true);
     setCart([]); setDiscInput(""); setDiscMode("$"); setReceived(""); setTransferPart(""); setPayMode("cash"); setPriceList("wholesale"); setCustomer(null);
   };
   // Cliente mayorista → pasa solo a lista mayorista
@@ -523,6 +528,10 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
   };
 
   const onSearchKey = (e: React.KeyboardEvent) => {
+    // Lista oculta después de agregar: Enter / ↑ / ↓ la vuelven a abrir con los mismos resultados
+    if (!showRes && q.trim() && (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp") && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault(); setShowRes(true); return;
+    }
     if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, results.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
     else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
@@ -535,7 +544,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
       if (results[hi] && !searching) { add(results[hi]); return; }
       quickAdd(term);
     }
-    else if (e.key === "Escape") { setQ(""); setResults([]); }
+    else if (e.key === "Escape") { setQ(""); setResults([]); setShowRes(true); }
   };
 
   return (
@@ -544,10 +553,10 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
       <div className="pos-left">
         <div style={card}>
           <div style={{ position: "relative" }}>
-          <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onSearchKey} autoFocus
+          <input ref={searchRef} value={q} onChange={(e) => { setQ(e.target.value); setShowRes(true); }} onKeyDown={onSearchKey} onClick={() => setShowRes(true)} autoFocus
             placeholder="Buscar o escanear producto…  (↑↓ elegir · Enter agregar · F2 cobrar)"
             style={{ ...inp, fontSize: 15, padding: "13px 14px" }} />
-          {q.trim() && (
+          {q.trim() && showRes && (
             <div className="results">
               {searching && results.length === 0 && <div style={{ padding: 12, fontSize: 13, color: "#999" }}>Buscando…</div>}
               {!searching && results.length === 0 && <div style={{ padding: 12, fontSize: 13, color: "#999" }}>Sin resultados</div>}

@@ -7,11 +7,13 @@
 //   GEMINI_MODEL=gemini-3.5-flash-lite   (opcional; si Google lo retira, se usa el que sugiere)
 // ═══════════════════════════════════════════════════════════════════
 import { PosError } from "@/lib/pos";
+import { aCastellano } from "@/lib/castellano";
 
 export type InvoiceImage = { mime: string; data: string }; // data = base64 sin "data:..."
 
 export type InvoiceLine = {
-  descripcion: string;
+  descripcion: string;            // tal cual figura en la factura
+  nombre_es: string;              // el mismo producto con nombre en castellano (sin "preto", portugués traducido)
   codigo: string | null;
   cantidad: number;
   precio_unitario: number | null; // por unidad, después de bonificaciones de la línea
@@ -20,6 +22,7 @@ export type InvoiceLine = {
 };
 
 export type InvoiceRead = {
+  moneda: "ARS" | "USD";          // en qué moneda están los precios de la factura
   proveedor: string | null;
   cuit: string | null;
   tipo: string | null;           // "A", "B", "C", "X", "remito"...
@@ -36,18 +39,32 @@ Te paso la foto (o PDF) de una factura, remito o presupuesto de un PROVEEDOR. Ex
 Reglas:
 - "items": una entrada por cada renglón de producto. No incluyas renglones de envío, flete, percepciones, impuestos ni subtotales.
 - "descripcion": el nombre del producto tal como aparece (corregí solo errores obvios de lectura).
+- "nombre_es": el MISMO producto con el nombre en castellano (español de Argentina), para cargarlo en el sistema:
+  · Traducí al castellano toda palabra en portugués u otro idioma: "TAMPA" → "Tapa", "BAT" → "Batería", "CONEC" → "Conector",
+    "COM" → "con", "S/" → "sin", "C/" → "con", "DIAGNOSTICAVEL" → "con diagnóstico", "GRAFITE" → "Grafito",
+    "BLUE" → "Azul", "RED" → "Rojo", "WHITE" → "Blanco", "GREY"/"CINZA" → "Gris", "PRETO"/"BLACK" en una tapa o funda → "Negro".
+  · En pantallas, módulos y frontales BORRÁ la palabra "PRETO" (y "BLACK"): no la traduzcas, no hace falta.
+  · Escribí completas las marcas abreviadas: "SAM" → "Samsung", "MOTO" → "Motorola", "XIAOMI REDMI" queda igual.
+  · "ORI" → "Original". Mantené modelos, códigos y medidas exactamente como están (A04, G24 Power, 14C, 5G, 4G).
+  · Formato de título: primera letra en mayúscula, sin MAYÚSCULAS sostenidas (ej. "Frontal Samsung A04 Original").
+  · Sacá símbolos sueltos que no aportan ("&&", "**", comillas).
+- "moneda": "USD" si los precios de la factura están en dólares (US$, U$S, USD, "dólar", "TOTAL PY", precios chicos de proveedor de Paraguay o Brasil con dos decimales como 7,00 o 12,20 por un repuesto), si no "ARS".
+  Si hay una columna en dólares y otra convertida a otra moneda o con recargo (ej. "TOTAL PY" y "TOTAL ARG"), usá SOLO los valores en dólares.
 - "codigo": el código o SKU del producto si figura; si no, null.
 - "cantidad": número entero de unidades. Si dice "x10" o "pack x 10" dentro de la cantidad, usá las unidades totales.
-- "precio_unitario": precio de UNA unidad tal como figura, ya aplicado el descuento o bonificación de ese renglón. Sin símbolo $, con punto decimal.
+- "precio_unitario": precio de UNA unidad tal como figura en la moneda de la factura, ya aplicado el descuento o bonificación de ese renglón. Sin símbolo $, con punto decimal.
+  Si la factura tiene columna de precio unitario (ej. "ATACADO", "UNIT.", "P. UNIT.") usá esa; si solo tiene el total del renglón, dividilo por la cantidad.
 - "subtotal": importe total del renglón, o null si no se lee.
 - Números argentinos: "1.234,50" es 1234.50.
 - "iva_discriminado": true si la factura muestra el IVA aparte (factura A, precios netos sin IVA); false si los precios ya incluyen IVA (factura B, C, X o remito).
 - "fecha" en formato YYYY-MM-DD. "proveedor" es quien VENDE (no "Concepción Tecnología").
+- Si un renglón no tiene descripción del producto, no lo incluyas.
 - Si algo no se lee con seguridad, poné null. No inventes productos.`;
 
 const SCHEMA = {
   type: "OBJECT",
   properties: {
+    moneda: { type: "STRING", enum: ["ARS", "USD"] },
     proveedor: { type: "STRING", nullable: true },
     cuit: { type: "STRING", nullable: true },
     tipo: { type: "STRING", nullable: true },
@@ -61,17 +78,18 @@ const SCHEMA = {
         type: "OBJECT",
         properties: {
           descripcion: { type: "STRING" },
+          nombre_es: { type: "STRING" },
           codigo: { type: "STRING", nullable: true },
           cantidad: { type: "INTEGER" },
           precio_unitario: { type: "NUMBER", nullable: true },
           subtotal: { type: "NUMBER", nullable: true },
           categoria_id: { type: "INTEGER" },
         },
-        required: ["descripcion", "cantidad", "categoria_id"],
+        required: ["descripcion", "nombre_es", "cantidad", "categoria_id"],
       },
     },
   },
-  required: ["iva_discriminado", "items"],
+  required: ["moneda", "iva_discriminado", "items"],
 };
 
 // Leer una factura no necesita "pensar": con el razonamiento apagado responde mucho más rápido
@@ -245,6 +263,7 @@ function clean(p: any): InvoiceRead {
     .slice(0, 150)
     .map((i: any) => ({
       descripcion: str(i?.descripcion, 255) || "",
+      nombre_es: aCastellano(str(i?.nombre_es, 255) || str(i?.descripcion, 255) || ""),
       codigo: str(i?.codigo, 60),
       cantidad: Math.max(1, Math.min(9999, Math.round(Number(i?.cantidad) || 1))),
       precio_unitario: num(i?.precio_unitario),
@@ -254,6 +273,7 @@ function clean(p: any): InvoiceRead {
     .filter((i: InvoiceLine) => i.descripcion);
   const fecha = str(p?.fecha, 10);
   return {
+    moneda: p?.moneda === "USD" ? "USD" : "ARS",
     proveedor: str(p?.proveedor, 150),
     cuit: str(p?.cuit, 20),
     tipo: str(p?.tipo, 20),
@@ -263,4 +283,43 @@ function clean(p: any): InvoiceRead {
     total: num(p?.total),
     items,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ¿ES EL MISMO PRODUCTO? — para renglones de factura dudosos.
+// Se le pasan pocos candidatos del catálogo por renglón y elige cuál es
+// el mismo producto (aunque esté escrito distinto) o ninguno. Solo texto: es rápido.
+// ═══════════════════════════════════════════════════════════════════
+export type MatchQuestion = { linea: number; producto: string; candidatos: { id: number; nombre: string }[] };
+
+const SAME_PROMPT = `Sos el encargado de stock de un local de accesorios y repuestos de celulares en Argentina.
+Para cada renglón de una factura de proveedor te paso el producto y algunos artículos del catálogo del local.
+Decidí si alguno es EXACTAMENTE el mismo producto, aunque esté escrito distinto (abreviado, en portugués, con otro orden de palabras,
+"Frontal" = "Módulo" = "Pantalla", "Sam" = "Samsung", "Moto" = "Motorola", "Bat" = "Batería", "Ori" = "Original").
+Es OTRO producto si cambia el modelo (A04 ≠ A04s ≠ A05, G24 ≠ G24 Power), la capacidad, la medida, el color o la calidad (Original ≠ Premium/Incell).
+Si un artículo del catálogo lista varios modelos compatibles y el de la factura es uno de ellos con la misma calidad, es el mismo.
+Ante la duda, respondé null: es preferible crear un artículo nuevo que sumar stock al equivocado.
+Devolvé para cada renglón el "id" elegido (de SUS candidatos) o null.`;
+
+const SAME_SCHEMA = {
+  type: "ARRAY",
+  items: {
+    type: "OBJECT",
+    properties: { linea: { type: "INTEGER" }, id: { type: "INTEGER", nullable: true } },
+    required: ["linea", "id"],
+  },
+};
+
+export async function confirmMatches(qs: MatchQuestion[]): Promise<Map<number, number | null>> {
+  const out = new Map<number, number | null>();
+  if (!qs.length) return out;
+  const text = qs.map((q) => `RENGLÓN ${q.linea}: ${q.producto}\n${q.candidatos.map((c) => `  - id ${c.id}: ${c.nombre}`).join("\n")}`).join("\n\n");
+  const parsed = await askGemini([{ text: `${SAME_PROMPT}\n\n${text}` }], SAME_SCHEMA, "los productos");
+  for (const r of Array.isArray(parsed) ? parsed : []) {
+    const q = qs.find((x) => x.linea === Number(r?.linea));
+    if (!q) continue;
+    const id = Number(r?.id);
+    out.set(q.linea, q.candidatos.some((c) => c.id === id) ? id : null);   // solo ids que se le ofrecieron
+  }
+  return out;
 }

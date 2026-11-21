@@ -12,6 +12,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { visibleSections, sectionOf, keepsAdmin } from "@/lib/sections";
 import { AdminUserContext, SectionIcon, AdminUnlock, type AdminUser, type AdminAccess } from "@/components/admin/session";
+import PasswordInput from "@/components/PasswordInput";
 
 type Badges = { pendingOrders: number; sinFoto: number; lowStock: number; cajaAbierta: boolean; toReorder?: number };
 
@@ -138,7 +139,7 @@ function Login({ onLogin }: { onLogin: (u: AdminUser) => void }) {
           </div>
           <div style={{ marginBottom: err ? 10 : 16 }}>
             <label style={{ fontSize: 11, color: "#444", display: "block", marginBottom: 5, fontWeight: 600 }}>CONTRASEÑA</label>
-            <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} autoComplete="current-password" style={field} />
+            <PasswordInput value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} autoComplete="current-password" style={field} />
           </div>
           {err && <p style={{ color: "#ef4444", fontSize: 12, marginBottom: 12 }}>{err}</p>}
           <button onClick={login} disabled={loading || !user || !pass}

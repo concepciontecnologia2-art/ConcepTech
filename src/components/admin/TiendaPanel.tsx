@@ -91,11 +91,11 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     return String(Math.round((v / c - 1) * 1000) / 10);
   };
 
+  // Artículo nuevo: arranca con 135 % de ganancia minorista y 30 % mayorista;
+  // a medida que se escribe el costo, los precios se calculan solos.
   const openNewForm = useCallback(()=>{
-    let r = "", w = "";
-    try { r = localStorage.getItem("ct_pct_retail") || ""; w = localStorage.getItem("ct_pct_wholesale") || ""; } catch {}
     setExtraImages([]);
-    setForm({ ...EMPTY_FORM, pct_retail:r, pct_wholesale:w });
+    setForm({ ...EMPTY_FORM, pct_retail:"135", pct_wholesale:"30" });
   },[]);
 
   const openEditForm = (p:any) => {
@@ -255,7 +255,6 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
         const sup = suppliersList.find((x:any)=>x.id===payload.supplier_id);
         setProducts(prev=>prev.map(p=>p.id===form.id?{...p,...payload,category_name:cat?.name||p.category_name,supplier_name:sup?.name||null}:p));
       } else {
-        try { localStorage.setItem("ct_pct_retail", form.pct_retail); localStorage.setItem("ct_pct_wholesale", form.pct_wholesale); } catch {}
         const res = await fetch("/api/products",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
         const p = await res.json().catch(()=>({}));
         if(!res.ok){ alert(p.error||"No se pudo guardar el artículo"); return; }

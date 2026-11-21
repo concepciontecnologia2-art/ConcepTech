@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════
 import { createContext, useContext, useState } from "react";
 import { ICONS, type Role } from "@/lib/sections";
+import PasswordInput from "@/components/PasswordInput";
 
 export type AdminUser = { name: string; role: Role; username?: string };
 export type AdminAccess = { name: string; username: string; owner: boolean; expiresAt: number };
@@ -88,7 +89,7 @@ export function AdminUnlock({ section, onCancel, ownerOnly }: { section: string;
         </div>
         <div>
           <label style={{ fontSize: 11, color: "#444", display: "block", marginBottom: 5, fontWeight: 600 }}>CONTRASEÑA</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()}
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()}
             autoFocus={!!prefill} autoComplete="off" style={field} />
         </div>
         {err && <p style={{ color: "#ef4444", fontSize: 12 }}>{err}</p>}
