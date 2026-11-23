@@ -173,7 +173,7 @@ export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: nu
       setData(d);
       // El PDF se arma apenas llegan los datos, así al tocar "PDF" se comparte en el mismo clic
       ticketPdf(d).then((blob) => setPdf(new File([blob], `ticket-${String(saleId).padStart(6, "0")}.pdf`, { type: "application/pdf" })))
-        .catch((e) => { console.error("ticketPdf", e); setPdfNote("No se pudo armar el PDF del ticket. Podés mandarlo por WhatsApp como mensaje o imprimirlo."); });
+        .catch((e) => { console.error("[ticket-pdf] error al armar el PDF", e); setPdfNote("No se pudo armar el PDF del ticket. Podés mandarlo por WhatsApp como mensaje o imprimirlo."); });
       if (d.sale.customer_phone) {
         setPhone(fmtPhone(d.sale.customer_phone));
         setPicked({ phone: d.sale.customer_phone, name: d.sale.customer_name || null });
@@ -221,23 +221,49 @@ export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: nu
   //    (El "Compartir" de Windows muchas veces no muestra WhatsApp o se cierra solo,
   //    y parecía que el botón no hacía nada.)
   const sendPdf = async () => {
-    if (!pdf || !data) return;
+    const log = (...a: any[]) => console.log("[ticket-pdf]", ...a);
+    log("click", { venta: saleId, datos: !!data, pdfListo: !!pdf, pdfBytes: pdf?.size, numero: num || "(sin número)", navegador: navigator.userAgent });
+    if (!data) { log("todavía no llegaron los datos de la venta"); setPdfNote("Todavía se están cargando los datos de la venta. Probá de nuevo en un segundo."); return; }
+    let file = pdf;
+    if (!file) {
+      // El PDF no se había armado: se intenta de nuevo ahora y se muestra el error si falla
+      log("el PDF no estaba listo, armándolo ahora…");
+      try {
+        const blob = await ticketPdf(data);
+        file = new File([blob], `ticket-${String(saleId).padStart(6, "0")}.pdf`, { type: "application/pdf" });
+        setPdf(file); log("PDF armado", file.size, "bytes");
+      } catch (e: any) {
+        console.error("[ticket-pdf] error al armar el PDF", e);
+        setPdfNote(`No se pudo armar el PDF: ${e?.message || e}`);
+        return;
+      }
+    }
+    const pdfFile = file;
     const text = `Comprobante de compra N° ${String(saleId).padStart(6, "0")} – ${data.business.name}`;
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
     const isPhone = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-    if (isPhone && nav.canShare?.({ files: [pdf] })) {
-      try { await navigator.share({ files: [pdf], title: text, text }); remember(); onClose(); return; }
-      catch (e: any) { if (e?.name === "AbortError") return; }
+    log("¿celular?", isPhone, "¿puede compartir archivos?", !!nav.canShare?.({ files: [pdfFile] }));
+    if (isPhone && nav.canShare?.({ files: [pdfFile] })) {
+      try { log("abriendo Compartir…"); await navigator.share({ files: [pdfFile], title: text, text }); log("compartido OK"); remember(); onClose(); return; }
+      catch (e: any) { log("Compartir falló:", e?.name, e?.message); if (e?.name === "AbortError") return; }
     }
-    const url = URL.createObjectURL(pdf);
-    const a = document.createElement("a"); a.href = url; a.download = pdf.name; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    try {
+      const url = URL.createObjectURL(pdfFile);
+      const a = document.createElement("a"); a.href = url; a.download = pdfFile.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      log("descarga iniciada:", pdfFile.name);
+    } catch (e: any) {
+      console.error("[ticket-pdf] error al descargar", e);
+      setPdfNote(`No se pudo descargar el PDF: ${e?.message || e}`);
+      return;
+    }
     if (num) {
-      window.open(`https://wa.me/${num}?text=${encodeURIComponent(`¡Hola! Te envío el comprobante de tu compra (N° ${String(saleId).padStart(6, "0")}). Te lo adjunto en PDF.`)}`, "_blank", "noopener");
+      const w = window.open(`https://wa.me/${num}?text=${encodeURIComponent(`¡Hola! Te envío el comprobante de tu compra (N° ${String(saleId).padStart(6, "0")}). Te lo adjunto en PDF.`)}`, "_blank", "noopener");
+      log("chat de WhatsApp", w === null ? "abierto (o bloqueado por el navegador: revisá el aviso de ventanas emergentes)" : "abierto");
       remember();
-      setPdfNote(`Se descargó ${pdf.name}. En el chat que se abrió, tocá el clip 📎 y adjuntalo.`);
+      setPdfNote(`Se descargó ${pdfFile.name}. En el chat que se abrió, tocá el clip 📎 y adjuntalo.`);
     } else {
-      setPdfNote(`Se descargó ${pdf.name}. Para mandarlo por WhatsApp, escribí el número arriba y tocá "PDF" de nuevo.`);
+      setPdfNote(`Se descargó ${pdfFile.name}. Para mandarlo por WhatsApp, escribí el número arriba y tocá "PDF" de nuevo.`);
     }
   };
 
@@ -297,8 +323,8 @@ export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: nu
 
       <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" }}>
         <button onClick={onClose} style={btn("gray")}>{afterSale ? "No enviar" : "Cancelar"}</button>
-        <button onClick={sendPdf} disabled={!pdf} title={pdf ? "Descarga el ticket en PDF y abre el chat para adjuntarlo" : "Armando el PDF…"}
-          style={{ ...btn("gray"), fontWeight: 700, opacity: pdf ? 1 : 0.5 }}>
+        <button onClick={sendPdf} disabled={!data} title="Descarga el ticket en PDF y abre el chat para adjuntarlo"
+          style={{ ...btn("gray"), fontWeight: 700, opacity: data ? 1 : 0.5 }}>
           📄 PDF
         </button>
         <button onClick={send} disabled={!data || !valid}
