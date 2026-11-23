@@ -553,7 +553,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
       {/* ── IZQUIERDA: buscador + carrito ── */}
       <div className="pos-left">
         <div style={card} className="pos-top">
-          <div style={{ position: "relative", minWidth: 0 }}>
+          <div className="pos-search">
           <input ref={searchRef} value={q} onChange={(e) => { setQ(e.target.value); setShowRes(true); }} onKeyDown={onSearchKey} onClick={() => setShowRes(true)} autoFocus
             placeholder="Buscar o escanear producto…  (↑↓ elegir · Enter agregar · F2 cobrar)"
             style={{ ...inp, fontSize: 15, padding: "13px 14px" }} />
@@ -564,22 +564,19 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
               {results.map((p, i) => {
                 const left = p.stock_quantity - inCart(p.id);
                 return (
-                  <div key={p.id} onMouseDown={(e) => { e.preventDefault(); add(p); }} onMouseEnter={() => setHi(i)}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", cursor: left > 0 ? "pointer" : "not-allowed",
-                             background: i === hi ? "rgba(0,180,216,.08)" : "#fff", borderBottom: "1px solid #f3f4f6", opacity: left > 0 ? 1 : .5 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 7, background: "#f3f4f6", flexShrink: 0, overflow: "hidden" }}>
-                      {p.image_url && <img src={p.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                  <div key={p.id} className={`res-row${i === hi ? " on" : ""}${left > 0 ? "" : " off"}`}
+                    onMouseDown={(e) => { e.preventDefault(); add(p); }} onMouseEnter={() => setHi(i)}>
+                    <div className="res-img">
+                      {p.image_url && <img src={p.image_url} alt="" />}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</p>
-                      <p style={{ fontSize: 11, color: "#888" }}>
-                        #{p.id}{p.sku ? ` · ${p.sku}` : ""} · {p.category_name} ·{" "}
-                        <span style={{ color: left <= 0 ? "#ef4444" : left <= 3 ? "#d97706" : "#059669", fontWeight: 600 }}>
-                          {left <= 0 ? "Sin stock" : `${left} en stock`}
-                        </span>
-                      </p>
+                    <div className="res-txt">
+                      <p className="res-name">{p.name}</p>
+                      <p className="res-meta">#{p.id}{p.sku ? ` · ${p.sku}` : ""} · {p.category_name}</p>
                     </div>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: "#0891b2" }}>{fmt(unitPrice(p))}</span>
+                    <span className="res-stock" style={{ color: left <= 0 ? "#ef4444" : left <= 3 ? "#d97706" : "#059669" }}>
+                      {left <= 0 ? "Sin stock" : `${left} en stock`}
+                    </span>
+                    <span className="res-price">{fmt(unitPrice(p))}</span>
                   </div>
                 );
               })}
@@ -1012,7 +1009,25 @@ export const POS_CSS = `
   .st-total span{font-size:13px;font-weight:800;color:#0e7490;letter-spacing:.06em}
   .st-total strong{font-size:32px;font-weight:800;color:#0891b2;line-height:1;white-space:nowrap}
   @media(max-width:520px){ .st-total strong{font-size:26px} }
-  .results{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;z-index:40;max-height:380px;overflow-y:auto;box-shadow:0 10px 24px rgba(0,0,0,.1)}
+  .pos-search{position:relative;min-width:0}
+  .results{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;z-index:40;max-height:min(70vh,560px);overflow-y:auto;box-shadow:0 12px 28px rgba(0,0,0,.14)}
+  /* Resultados: nombre completo (sin cortar), filas compactas para que entren más */
+  .res-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;align-items:center;gap:4px 10px;padding:5px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;background:#fff}
+  .res-row.on{background:rgba(0,180,216,.1)}
+  .res-row.off{opacity:.5;cursor:not-allowed}
+  .res-img{width:30px;height:30px;border-radius:6px;background:#f3f4f6;overflow:hidden}
+  .res-img img{width:100%;height:100%;object-fit:cover;display:block}
+  .res-txt{min-width:0}
+  .res-name{font-size:13px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+  .res-meta{font-size:11px;color:#9ca3af;line-height:1.3}
+  .res-stock{font-size:11.5px;font-weight:600;white-space:nowrap;text-align:right}
+  .res-price{font-size:14px;font-weight:700;color:#0891b2;white-space:nowrap;text-align:right;min-width:84px}
+  @media(max-width:640px){
+    .res-row{grid-template-columns:30px minmax(0,1fr) auto;padding:6px 10px}
+    .res-stock{grid-column:2;grid-row:2;text-align:left;margin-top:-2px}
+    .res-price{grid-row:1/3;grid-column:3;min-width:0}
+    .res-img{grid-row:1/3}
+  }
   .cart-line{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6;flex-wrap:wrap}
   .pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
   .tbl{width:100%;border-collapse:collapse;font-size:13px}
@@ -1043,7 +1058,9 @@ export const POS_CSS = `
     .view-btn{text-align:left}
     .pos-grid{grid-template-columns:minmax(0,1fr) 330px;height:calc(100vh - var(--adm-top-h, 0px) - 72px);min-height:480px}
     /* Buscador y total en la misma fila: deja más lugar para la lista de productos */
-    .pos-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px !important}
+    .pos-top{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px !important}
+    .pos-top .pos-search{position:static}
+    .pos-top .results{left:14px;right:14px;top:calc(100% - 6px);max-height:calc(100vh - var(--adm-top-h, 0px) - 170px)}
     .pos-top .sale-total{margin-top:0;padding:6px 14px;flex-wrap:nowrap;gap:14px}
     .pos-top .st-info{flex-direction:column;gap:0;font-size:12px;line-height:1.35;white-space:nowrap}
     .pos-top .st-total strong{font-size:26px}

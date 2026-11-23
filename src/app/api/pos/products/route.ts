@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
        JOIN categories c ON c.id = p.category_id
        WHERE ${where}
        ORDER BY (p.stock_quantity > 0) DESC, p.name
-       LIMIT 25`,
+       LIMIT 40`,
       params
     );
     return NextResponse.json(rows);
