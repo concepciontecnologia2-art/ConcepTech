@@ -172,7 +172,8 @@ export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: nu
     api(`/api/pos/sales/${saleId}`).then((d: TicketData) => {
       setData(d);
       // El PDF se arma apenas llegan los datos, así al tocar "PDF" se comparte en el mismo clic
-      ticketPdf(d).then((blob) => setPdf(new File([blob], `ticket-${String(saleId).padStart(6, "0")}.pdf`, { type: "application/pdf" }))).catch(() => {});
+      ticketPdf(d).then((blob) => setPdf(new File([blob], `ticket-${String(saleId).padStart(6, "0")}.pdf`, { type: "application/pdf" })))
+        .catch((e) => { console.error("ticketPdf", e); setPdfNote("No se pudo armar el PDF del ticket. Podés mandarlo por WhatsApp como mensaje o imprimirlo."); });
       if (d.sale.customer_phone) {
         setPhone(fmtPhone(d.sale.customer_phone));
         setPicked({ phone: d.sale.customer_phone, name: d.sale.customer_name || null });
@@ -214,13 +215,17 @@ export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: nu
     }).catch(() => {});
   };
 
-  // Mandar el PDF: en el celular (y en la compu con Windows) se abre "Compartir" y se elige WhatsApp.
-  // Si el navegador no puede compartir archivos: se descarga el PDF y se abre el chat para adjuntarlo.
+  // Mandar el PDF:
+  //  • Celular: se abre "Compartir" y se elige WhatsApp.
+  //  • Computadora: se descarga el PDF y se abre el chat de WhatsApp para adjuntarlo.
+  //    (El "Compartir" de Windows muchas veces no muestra WhatsApp o se cierra solo,
+  //    y parecía que el botón no hacía nada.)
   const sendPdf = async () => {
     if (!pdf || !data) return;
     const text = `Comprobante de compra N° ${String(saleId).padStart(6, "0")} – ${data.business.name}`;
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
-    if (nav.canShare?.({ files: [pdf] })) {
+    const isPhone = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    if (isPhone && nav.canShare?.({ files: [pdf] })) {
       try { await navigator.share({ files: [pdf], title: text, text }); remember(); onClose(); return; }
       catch (e: any) { if (e?.name === "AbortError") return; }
     }
@@ -292,7 +297,7 @@ export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: nu
 
       <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end", flexWrap: "wrap" }}>
         <button onClick={onClose} style={btn("gray")}>{afterSale ? "No enviar" : "Cancelar"}</button>
-        <button onClick={sendPdf} disabled={!pdf} title="Manda el ticket como archivo PDF"
+        <button onClick={sendPdf} disabled={!pdf} title={pdf ? "Descarga el ticket en PDF y abre el chat para adjuntarlo" : "Armando el PDF…"}
           style={{ ...btn("gray"), fontWeight: 700, opacity: pdf ? 1 : 0.5 }}>
           📄 PDF
         </button>
