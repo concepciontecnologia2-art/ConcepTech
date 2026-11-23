@@ -17,14 +17,14 @@ type Product = { id: number; name: string; sku: string | null; image_url: string
 type Order = { id: number; status: "sent" | "received" | "cancelled"; sent_at: string; received_at: string | null; notes: string | null; items: { name: string; quantity: number; free: boolean }[] };
 type Data = { threshold: number; suppliers: Supplier[]; supplier: Supplier | null; products: Product[]; orders: Order[]; group_url: string | null };
 type Free = { key: number; name: string; qty: number };
-type Draft = { qty: Record<number, number>; free: Free[]; note: string };
+type Draft = { qty: Record<number, number>; free: Free[]; note: string; v?: number };
 
 const DRAFT_KEY = "ct_saphirus_draft";
-const emptyDraft: Draft = { qty: {}, free: [], note: "" };
+const emptyDraft: Draft = { qty: {}, free: [], note: "", v: 2 };
 let seq = Date.now();
 
 const loadDraft = (): Draft => {
-  try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); if (d && typeof d === "object") return { ...emptyDraft, ...d }; } catch {}
+  try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); if (d && typeof d === "object") return { ...emptyDraft, v: undefined, ...d }; } catch {}
   return emptyDraft;
 };
 const saveDraft = (d: Draft) => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch {} };
@@ -58,6 +58,40 @@ export default function SaphirusPedido() {
 
   const supplier = data?.supplier || null;
   const products = data?.products || [];
+
+  // Pedidos armados antes del cambio a "bulto de 12": las cantidades que quedaron con el
+  // valor automático viejo (6, o lo que daba la fórmula anterior) en Textil / Aerosol /
+  // Varilla pasan a 12. Lo que se haya escrito a mano distinto se respeta. Corre una sola vez.
+  useEffect(() => {
+    if (!data || draft.v === 2) return;
+    update((d) => {
+      const qty = { ...d.qty };
+      for (const p of data.products) {
+        const q = qty[p.id];
+        if (!q || !saphirusBulto(p.name)) continue;
+        const viejo = Math.max(1, (p.min_stock > 2 ? p.min_stock * 2 : 6) - Math.max(0, p.stock));
+        if (q === viejo || q === 6) qty[p.id] = saphirusSuggested(p.name);
+      }
+      return { ...d, qty, v: 2 };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, draft.v]);
+
+  // Textil, Aerosol y Varilla arrancan ya con 12 (un bulto) adentro del pedido.
+  // Solo se completan los que todavía no tienen cantidad: si uno se pone en 0, queda en 0
+  // (se guarda el 0). Los que ya están pedidos y en camino no se agregan.
+  // Al enviar el pedido el borrador se limpia y en el siguiente vuelven a arrancar en 12.
+  useEffect(() => {
+    if (!data) return;
+    const faltan = data.products.filter((p) => saphirusBulto(p.name) && !p.pending_sent_at && !(p.id in draft.qty));
+    if (!faltan.length) return;
+    update((d) => {
+      const qty = { ...d.qty };
+      for (const p of faltan) if (!(p.id in qty)) qty[p.id] = saphirusSuggested(p.name);
+      return { ...d, qty };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, draft.qty]);
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const low = products.filter((p) => p.stock <= (data?.threshold ?? 2));
 
@@ -81,7 +115,9 @@ export default function SaphirusPedido() {
 
   const setQty = (id: number, q: number) => update((d) => {
     const qty = { ...d.qty };
-    if (q > 0) qty[id] = Math.min(9999, q); else delete qty[id];
+    if (q > 0) qty[id] = Math.min(9999, q);
+    else if (saphirusBulto(byId.get(id)?.name || "")) qty[id] = 0;   // queda en 0 (no se vuelve a poner 12 solo)
+    else delete qty[id];
     return { ...d, qty };
   });
 
@@ -263,7 +299,7 @@ export default function SaphirusPedido() {
           )}
 
           <div style={{ display: "flex", gap: 8 }}>
-            {lineCount > 0 && <button className="sp-btn" onClick={() => { if (confirm("¿Vaciar el pedido?")) update(() => emptyDraft); }}>Vaciar</button>}
+            {lineCount > 0 && <button className="sp-btn" onClick={() => { if (confirm("¿Vaciar el pedido?")) update(() => ({ ...emptyDraft, qty: Object.fromEntries(products.filter((p) => saphirusBulto(p.name)).map((p) => [p.id, 0])) })); }}>Vaciar</button>}
             <button className="sp-btn wa" style={{ flex: 1 }} disabled={!lineCount || !supplier || sending} onClick={send}>
               <WaIcon /> {sending ? "Guardando…" : "Enviar al grupo"}
             </button>
