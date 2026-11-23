@@ -106,8 +106,18 @@ export function Modal({ children, onClose }: { children: React.ReactNode; onClos
 }
 
 // ─── Ticket (80 mm) ─────────────────────────────────────────────────
-// Se imprime desde un marco oculto: no abre ventanas nuevas ni lo frena el bloqueador de pop-ups.
+// En la compu se imprime desde un marco oculto: no abre ventanas nuevas ni lo frena el bloqueador de pop-ups.
+// En celular/tablet (iPhone sobre todo) el navegador ignora imprimir desde un marco oculto
+// y el botón parecía no hacer nada: ahí se abre el ticket en otra pestaña, con su botón
+// "Imprimir" (desde ahí también se puede guardar como PDF o compartir).
 export function printTicket(saleId: number) {
+  const touch = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPad nuevo
+  if (touch) {
+    const w = window.open(`/ticket/${saleId}`, "_blank");
+    if (!w) window.location.href = `/ticket/${saleId}`;   // si bloqueó la pestaña nueva, se abre en la misma
+    return;
+  }
   document.getElementById("ticket-frame")?.remove();
   const f = document.createElement("iframe");
   f.id = "ticket-frame";
@@ -850,7 +860,9 @@ export function SalesList({ refreshKey, onChange, canVoid }: { refreshKey: numbe
                   <span className="r sl-total">{fmt(x.total)}</span>
                   <span className="sl-acts" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => setShareId(x.id)} title="Enviar ticket por WhatsApp" className="sl-wa">WhatsApp</button>
-                    <button onClick={() => printTicket(x.id)} title="Imprimir ticket" className="sl-btn">🖨</button>
+                    <button onClick={() => printTicket(x.id)} title="Imprimir ticket" aria-label="Imprimir ticket" className="sl-btn sl-print">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>
+                    </button>
                     {canVoid && x.status === "completed" && <button onClick={() => { setVoiding(x); setReason(""); setErr(""); }} title="Anular" className="sl-btn red">Anular</button>}
                     <span className="sl-chev">{isOpen ? "▴" : "▾"}</span>
                   </span>
@@ -1124,7 +1136,7 @@ export const POS_CSS = `
   .sl-sum small{font-size:11px;color:#98a2b3}
   .sl-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
   .sl-table{border:1px solid #eef0f3;border-radius:10px;overflow:hidden}
-  .sl-row{display:grid;grid-template-columns:56px 96px minmax(0,1.4fr) minmax(0,1.4fr) 100px 104px 170px;gap:10px;align-items:center;padding:9px 12px;font-size:13px;cursor:pointer}
+  .sl-row{display:grid;grid-template-columns:56px 96px minmax(0,1.4fr) minmax(0,1.4fr) 100px 120px 222px;gap:10px;align-items:center;padding:9px 12px;font-size:13px;cursor:pointer}
   .sl-th{background:#fafbfc;font-size:11px;font-weight:700;color:#98a2b3;text-transform:uppercase;letter-spacing:.03em;cursor:default;border-bottom:1px solid #eef0f3}
   .sl-item{border-bottom:1px solid #f3f4f6}
   .sl-item:last-child{border-bottom:0}
@@ -1142,7 +1154,9 @@ export const POS_CSS = `
   .sl-prods{color:#444;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .sl-total{font-weight:800;font-size:14px;white-space:nowrap}
   .sl-acts{display:flex;gap:5px;justify-content:flex-end;align-items:center}
-  .sl-acts button{border-radius:7px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid #e5e7eb;background:#fff;color:#344054}
+  .sl-acts button{border-radius:7px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid #e5e7eb;background:#fff;color:#344054;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;line-height:1.2}
+  .sl-acts .sl-print{padding:5px 8px;color:#475467}
+  .sl-acts .sl-print:hover{background:#f2f4f7}
   .sl-acts .sl-wa{background:#dcfce7;border-color:#86efac;color:#15803d}
   .sl-acts .red{background:#fef2f2;border-color:#fecaca;color:#dc2626}
   .sl-chev{color:#98a2b3;font-size:12px;width:12px;text-align:center}

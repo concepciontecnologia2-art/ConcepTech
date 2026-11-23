@@ -99,7 +99,7 @@ export default function TicketPage() {
       {!autoPrint && (
         <div className="screen-bar">
           <button onClick={() => window.print()}>{publicView ? "Guardar / Imprimir" : "Imprimir"}</button>
-          {!publicView && <button className="ghost" onClick={() => window.close()}>Cerrar</button>}
+          {!publicView && <button className="ghost" onClick={() => { window.close(); setTimeout(() => history.back(), 200); }}>Cerrar</button>}
         </div>
       )}
       {partes.map((items, pi) => {
