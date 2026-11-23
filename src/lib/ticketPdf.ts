@@ -1,5 +1,7 @@
 // PDF del ticket (80 mm de ancho, alto según los renglones) para mandar por WhatsApp.
 // Se arma en el navegador con jsPDF (sin servidor). Comprobante NO fiscal.
+import { discountLabel } from "@/lib/descuento";
+
 export type TicketPdfData = {
   sale: {
     id: number; status: string; created_at: string; price_list?: string | null;
@@ -61,7 +63,7 @@ export async function ticketPdf(d: TicketPdfData): Promise<Blob> {
   hr();
   const units = s.items.reduce((a, i) => a + i.quantity, 0);
   doc.setFontSize(7.5); doc.setFont("courier", "normal"); doc.text(`${units} ${units === 1 ? "artículo" : "artículos"}`, M, y); y += 3.6;
-  if (s.discount > 0) { row("Subtotal", money(s.subtotal), 8.5); row("Descuento", "-" + money(s.discount), 8.5); }
+  if (s.discount > 0) { row("Subtotal", money(s.subtotal), 8.5); row(discountLabel(s.subtotal, s.discount), "-" + money(s.discount), 8.5); }
   y += 1; row("TOTAL", money(s.total), 12, true); y += 0.8;
   for (const p of s.payments) row(p.method === "cash" ? "Efectivo" : "Transferencia", money(p.amount), 8.5);
   hr();

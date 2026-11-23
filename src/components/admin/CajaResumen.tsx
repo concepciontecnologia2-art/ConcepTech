@@ -227,9 +227,9 @@ export default function CajaResumen({ refreshKey = 0 }: { refreshKey?: number })
                 : <><span className={`lc-trend ${diff >= 0 ? "up" : "down"}`}>{diff >= 0 ? "▲" : "▼"} {Math.abs(diff)}%</span> vs. ayer ({fmt(t.yesterday_total)})</>}
             </p>
             <div className="lc-hero-stats">
-              <div><b>{t.today_count}</b><span>{t.today_count === 1 ? "venta" : "ventas"}</span></div>
-              <div><b>{fmt(Math.round(avg))}</b><span>ticket promedio</span></div>
-              <div><b>{t.units || 0}</b><span>unidades</span></div>
+              <div><b>{t.today_count}</b><span>{t.today_count === 1 ? "Venta" : "Ventas"}</span></div>
+              <div><b>{fmt(Math.round(avg))}</b><span>Ticket promedio</span></div>
+              <div><b>{t.units || 0}</b><span>Unidades</span></div>
             </div>
           </div>
           <HourChart data={data.hourly} />

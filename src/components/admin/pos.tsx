@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import CustomerPicker, { type PickedCustomer } from "@/components/admin/CustomerPicker";
 import { toWhatsApp, fmtPhone } from "@/lib/phone";
 import { ticketPdf } from "@/lib/ticketPdf";
+import { discountLabel } from "@/lib/descuento";
 
 export const fmt = (n: number) => {
   const v = n || 0;
@@ -130,7 +131,7 @@ function ticketMessage(d: TicketData) {
   const when = `${dt.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })} ${dt.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
   const items = s.items.map((i) => i.quantity > 1
     ? `• ${i.quantity} x ${i.name}\n   ${fmt(i.unit_price)} c/u — *${fmt(i.subtotal)}*`
-    : `• ${i.name} — *${fmt(i.subtotal)}*`).join("\n");
+    : `• 1 x ${i.name} — *${fmt(i.subtotal)}*`).join("\n");   // siempre con la cantidad, también cuando es 1
   const pays = s.payments.map((p) => `${p.method === "cash" ? "Efectivo" : "Transferencia"} ${fmt(p.amount)}`).join(" + ");
   const link = d.share_key ? `\n\nVer el comprobante: ${window.location.origin}/ticket/${s.id}?k=${d.share_key}` : "";
   return [
@@ -140,7 +141,7 @@ function ticketMessage(d: TicketData) {
     "",
     items,
     "",
-    s.discount > 0 ? `Descuento: -${fmt(s.discount)}` : "",
+    s.discount > 0 ? `Subtotal: ${fmt(s.subtotal)}\n${discountLabel(s.subtotal, s.discount)}: -${fmt(s.discount)}` : "",
     `*TOTAL: ${fmt(s.total)}*`,
     pays ? `Pago: ${pays}` : "",
   ].filter((l, i, a) => l !== "" || (a[i - 1] !== "" && i > 0)).join("\n") + link + `\n\n${d.business.footer || "¡Gracias por su compra!"}\n_Comprobante no válido como factura_`;
@@ -551,8 +552,8 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
     <div className="pos-grid">
       {/* ── IZQUIERDA: buscador + carrito ── */}
       <div className="pos-left">
-        <div style={card}>
-          <div style={{ position: "relative" }}>
+        <div style={card} className="pos-top">
+          <div style={{ position: "relative", minWidth: 0 }}>
           <input ref={searchRef} value={q} onChange={(e) => { setQ(e.target.value); setShowRes(true); }} onKeyDown={onSearchKey} onClick={() => setShowRes(true)} autoFocus
             placeholder="Buscar o escanear producto…  (↑↓ elegir · Enter agregar · F2 cobrar)"
             style={{ ...inp, fontSize: 15, padding: "13px 14px" }} />
@@ -586,12 +587,12 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
           )}
           </div>
 
-          {/* Total de la venta, en horizontal debajo del buscador */}
+          {/* Total de la venta: debajo del buscador en celular, al lado en computadora */}
           <div className="sale-total">
             <div className="st-info">
               <span><b>{cart.reduce((s, l) => s + l.quantity, 0)}</b> {cart.reduce((s, l) => s + l.quantity, 0) === 1 ? "artículo" : "artículos"}</span>
               <span>Subtotal <b>{fmt(subtotal)}</b></span>
-              {discount > 0 && <span style={{ color: "#d97706" }}>Descuento <b>− {fmt(discount)}</b></span>}
+              {discount > 0 && <span style={{ color: "#d97706" }}>Descuento{discMode === "%" && discRaw > 0 ? ` ${String(discRaw).replace(".", ",")}%` : ""} <b>− {fmt(discount)}</b></span>}
               <span style={{ color: priceList === "wholesale" ? "#7c3aed" : "#0369a1", fontWeight: 700 }}>Precios {priceList === "wholesale" ? "mayoristas" : "minoristas"}</span>
             </div>
             <div className="st-total">
@@ -835,7 +836,7 @@ export function SalesList({ refreshKey, onChange, canVoid }: { refreshKey: numbe
                         <b>{fmt(i.subtotal)}</b>
                       </div>
                     ))}
-                    {x.discount > 0 && <div className="sl-line"><span>Descuento</span><span /><b style={{ color: "#d97706" }}>− {fmt(x.discount)}</b></div>}
+                    {x.discount > 0 && <div className="sl-line"><span>{discountLabel(x.subtotal, x.discount)}</span><span /><b style={{ color: "#d97706" }}>− {fmt(x.discount)}</b></div>}
                     <div className="sl-line" style={{ borderTop: "1px dashed #e5e7eb", paddingTop: 6 }}>
                       <span className="sl-muted">{payLabel(x)}{x.seller_name ? ` · vendió ${x.seller_name}` : ""}{x.void_reason ? ` · Motivo: ${x.void_reason}` : ""}</span>
                       <span /><b>{fmt(x.total)}</b>
@@ -1040,7 +1041,19 @@ export const POS_CSS = `
     .kpi-row:last-child{border-bottom:none}
     .caja-views{flex-direction:column;overflow:visible}
     .view-btn{text-align:left}
-    .pos-grid{grid-template-columns:minmax(0,1fr) 330px;height:calc(100vh - var(--adm-top-h, 0px) - 86px);min-height:480px}
+    .pos-grid{grid-template-columns:minmax(0,1fr) 330px;height:calc(100vh - var(--adm-top-h, 0px) - 72px);min-height:480px}
+    /* Buscador y total en la misma fila: deja más lugar para la lista de productos */
+    .pos-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px !important}
+    .pos-top .sale-total{margin-top:0;padding:6px 14px;flex-wrap:nowrap;gap:14px}
+    .pos-top .st-info{flex-direction:column;gap:0;font-size:12px;line-height:1.35;white-space:nowrap}
+    .pos-top .st-total strong{font-size:26px}
+    .pos-top .st-total span{font-size:12px}
+    /* Carrito compacto: entran 10–12 productos en una notebook */
+    .pos-cart .cart-head{padding:8px 16px}
+    .pos-cart .cart-row{padding:3px 16px}
+    .pos-cart .cart-row.cart-th{padding-top:5px;padding-bottom:5px}
+    .pos-cart .cart-qty{height:25px}
+    .pos-cart .cart-x{width:24px;height:24px}
     .pos-left{display:flex;flex-direction:column;min-height:0}
     .pos-left > :first-child{flex-shrink:0}
     .pos-cart{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}

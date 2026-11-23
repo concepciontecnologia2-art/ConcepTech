@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { api, fmtDateTime } from "@/components/admin/pos";
-import { buildGroupMessage } from "@/lib/reposicion";
+import { buildGroupMessage, saphirusBulto, saphirusSuggested } from "@/lib/reposicion";
 import { sendToGroup } from "@/lib/grupoWhatsapp";
 
 type Supplier = { id: number; name: string; contact_name: string | null; whatsapp: string | null };
@@ -66,6 +66,19 @@ export default function SaphirusPedido() {
     .filter((p) => !onlyLow || p.stock <= (data?.threshold ?? 2))
     .filter((p) => words.every((w) => `${p.name} ${p.sku || ""} ${p.category || ""}`.toLowerCase().includes(w)));
 
+  // + / −: los que vienen en bulto (Textil, Aerosol, Varilla) van de a 12; el resto, de a 1.
+  // Escribiendo se puede poner cualquier cantidad.
+  const stepUp = (q: number, name: string) => {
+    const b = saphirusBulto(name);
+    if (b) return (Math.floor(q / b) + 1) * b;
+    return q + 1;
+  };
+  const stepDown = (q: number, name: string) => {
+    const b = saphirusBulto(name);
+    if (b) return (Math.ceil(q / b) - 1) * b;
+    return q - 1;
+  };
+
   const setQty = (id: number, q: number) => update((d) => {
     const qty = { ...d.qty };
     if (q > 0) qty[id] = Math.min(9999, q); else delete qty[id];
@@ -96,7 +109,7 @@ export default function SaphirusPedido() {
 
   const addAllLow = () => update((d) => {
     const qty = { ...d.qty };
-    for (const p of low) if (!qty[p.id] && !p.pending_sent_at) qty[p.id] = Math.max(1, (p.min_stock > 2 ? p.min_stock * 2 : 6) - Math.max(0, p.stock));
+    for (const p of low) if (!qty[p.id] && !p.pending_sent_at) qty[p.id] = saphirusSuggested(p.name);
     return { ...d, qty };
   });
 
@@ -190,9 +203,9 @@ export default function SaphirusPedido() {
                     </div>
                   </div>
                   <div className="sp-step">
-                    <button onClick={() => setQty(p.id, q - 1)} disabled={!q} aria-label="Menos">−</button>
+                    <button onClick={() => setQty(p.id, stepDown(q, p.name))} disabled={!q} aria-label={saphirusBulto(p.name) ? "Un bulto menos" : "Menos"}>−</button>
                     <input inputMode="numeric" value={q || ""} placeholder="0" onChange={(e) => setQty(p.id, Math.round(Number(e.target.value.replace(/\D/g, "")) || 0))} />
-                    <button onClick={() => setQty(p.id, q + 1)} aria-label="Más">+</button>
+                    <button onClick={() => setQty(p.id, stepUp(q, p.name))} aria-label={saphirusBulto(p.name) ? "Un bulto más (12)" : "Más"}>+</button>
                   </div>
                 </div>
               );

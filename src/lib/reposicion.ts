@@ -8,15 +8,29 @@
 /** Con esta cantidad o menos, el producto hay que pedirlo */
 export const REORDER_AT = 2;
 
+/** Cantidad que se pide por defecto (se puede cambiar antes de enviar) */
+export const DEFAULT_ORDER_QTY = 10;
+
 /**
- * Cantidad sugerida para pedir (se puede cambiar antes de enviar).
- * Si el producto tiene un mínimo cargado mayor, apunta al doble del mínimo;
- * si no, a 6 unidades.
+ * Cantidad sugerida para pedir: 10 unidades (lo que más se pide).
+ * Si el producto tiene un mínimo cargado y el doble del mínimo da más, se usa eso.
  */
 export function suggestedQty(stock: number, minStock: number) {
-  const target = minStock > REORDER_AT ? minStock * 2 : REORDER_AT * 3;
-  return Math.max(1, target - Math.max(0, stock));
+  const target = minStock > REORDER_AT ? minStock * 2 - Math.max(0, stock) : 0;
+  return Math.max(DEFAULT_ORDER_QTY, target);
 }
+
+/**
+ * Saphirus: Textil, Aerosol y Varilla vienen en bulto de 12 → se piden de a 12.
+ * Devuelve el tamaño del bulto según el nombre, o null si se pide por unidad.
+ */
+export function saphirusBulto(name: string): number | null {
+  const n = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /\b(textil|textiles|aerosol|aerosoles|varilla|varillas)\b/.test(n) ? 12 : null;
+}
+
+/** Cantidad sugerida para un producto Saphirus: el bulto, o 10 si no viene en bulto */
+export const saphirusSuggested = (name: string) => saphirusBulto(name) ?? DEFAULT_ORDER_QTY;
 
 export type OrderLine = { name: string; sku?: string | null; quantity: number };
 

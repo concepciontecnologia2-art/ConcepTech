@@ -6,6 +6,7 @@
 // /ticket/123?k=CLAVE    → link PÚBLICO que se le manda al cliente por WhatsApp
 // Sin la clave, los datos vienen de /api/pos/sales/[id]: sin sesión iniciada no muestra nada.
 // ═══════════════════════════════════════════════════════════════════
+import { discountLabel } from "@/lib/descuento";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
@@ -18,6 +19,9 @@ type Data = {
   };
   business: { name: string; phone: string; address: string; header: string; footer: string };
 };
+
+// Tickets largos: se imprimen en boletas de a 20 productos; la última suma todas
+const POR_BOLETA = 20;
 
 const money = (n: number) =>
   "$ " + new Intl.NumberFormat("es-AR", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -42,7 +46,9 @@ const CSS = `
   .screen-bar button { padding: 8px 16px; border-radius: 8px; border: 1px solid #00B4D8; background: #00B4D8; color: #fff !important; font-weight: 700; cursor: pointer; font-size: 14px; }
   .screen-bar button.ghost { background: #fff; color: #444 !important; border-color: #e5e7eb; }
   @media screen { body { background: #e5e7eb !important; } .tk { background: #fff; padding: 6mm 4mm; margin: 16px auto; box-shadow: 0 4px 16px rgba(0,0,0,.12); width: 80mm; } }
-  @media print { .screen-bar { display: none !important; } }
+  .part { border: 1px solid #000; text-align: center; font-weight: 800; padding: 2px; margin-top: 4px; }
+  .tk + .tk { break-before: page; page-break-before: always; }
+  @media print { .screen-bar { display: none !important; } .tk + .tk { margin-top: 0; } }
 `;
 
 export default function TicketPage() {
@@ -80,6 +86,12 @@ export default function TicketPage() {
   const date = d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
   const time = d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
   const units = s.items.reduce((n, i) => n + i.quantity, 0);
+  type It = (typeof s.items)[number];
+  const partes: It[][] = [];
+  for (let i = 0; i < s.items.length; i += POR_BOLETA) partes.push(s.items.slice(i, i + POR_BOLETA));
+  if (!partes.length) partes.push([]);
+  const sumar = (its: It[]) => Math.round(its.reduce((n, i) => n + Number(i.subtotal), 0) * 100) / 100;
+  const unidades = (its: It[]) => its.reduce((n, i) => n + i.quantity, 0);
 
   return (
     <>
@@ -90,47 +102,68 @@ export default function TicketPage() {
           {!publicView && <button className="ghost" onClick={() => window.close()}>Cerrar</button>}
         </div>
       )}
-      <div className="tk">
-        <div className="c">
-          <div className="name">{b.name}</div>
-          {b.header && <div className="small">{b.header}</div>}
-          {b.address && <div className="small">{b.address}</div>}
-          {b.phone && <div>Tel: {b.phone}</div>}
-        </div>
-        <div className="hr" />
-        <div className="row"><span className="b">Ticket N° {String(s.id).padStart(6, "0")}</span><span>{date} {time}</span></div>
-        <div>Cliente: {s.customer_name ? `${s.customer_name}${s.customer_doc ? ` (${s.customer_doc})` : ""}` : "Consumidor final"}</div>
-        {s.customer_name && s.customer_address && <div>Dirección: {s.customer_address}</div>}
-        {s.seller_name && <div>Atendió: {s.seller_name}</div>}
-        {s.price_list === "wholesale" && <div>Lista: Mayorista</div>}
-        {s.status === "voided" && <div className="void">VENTA ANULADA</div>}
-        <div className="hr" />
+      {partes.map((items, pi) => {
+        const ultima = pi === partes.length - 1, varias = partes.length > 1;
+        return (
+          <div className="tk" key={pi}>
+            <div className="c">
+              <div className="name">{b.name}</div>
+              {b.header && <div className="small">{b.header}</div>}
+              {b.address && <div className="small">{b.address}</div>}
+              {b.phone && <div>Tel: {b.phone}</div>}
+            </div>
+            <div className="hr" />
+            <div className="row"><span className="b">Ticket N° {String(s.id).padStart(6, "0")}</span><span>{date} {time}</span></div>
+            {varias && <div className="part">BOLETA {pi + 1} DE {partes.length}</div>}
+            <div>Cliente: {s.customer_name ? `${s.customer_name}${s.customer_doc ? ` (${s.customer_doc})` : ""}` : "Consumidor final"}</div>
+            {s.customer_name && s.customer_address && <div>Dirección: {s.customer_address}</div>}
+            {s.seller_name && <div>Atendió: {s.seller_name}</div>}
+            {s.price_list === "wholesale" && <div>Lista: Mayorista</div>}
+            {s.status === "voided" && <div className="void">VENTA ANULADA</div>}
+            <div className="hr" />
 
-        {s.items.map((it, i) => (
-          <div key={i} className="item">
-            <div className="item-name">{it.name}</div>
-            <div className="row"><span>{it.quantity} x {money(it.unit_price)}</span><span>{money(it.subtotal)}</span></div>
+            {items.map((it, i) => (
+              <div key={i} className="item">
+                <div className="item-name">{it.name}</div>
+                <div className="row"><span>{it.quantity} x {money(it.unit_price)}</span><span>{money(it.subtotal)}</span></div>
+              </div>
+            ))}
+
+            <div className="hr" />
+            {!ultima ? (
+              <>
+                <div className="row small"><span>{unidades(items)} {unidades(items) === 1 ? "artículo" : "artículos"}</span><span /></div>
+                <div className="row b"><span>Subtotal boleta {pi + 1}</span><span>{money(sumar(items))}</span></div>
+                <div className="hr" />
+                <div className="c small">Continúa en la boleta {pi + 2} de {partes.length}</div>
+              </>
+            ) : (
+              <>
+                {varias && partes.map((p2, k) => (
+                  <div key={k} className="row small"><span>Boleta {k + 1} ({p2.length} prod.)</span><span>{money(sumar(p2))}</span></div>
+                ))}
+                {varias && <div className="hr" />}
+                <div className="row small"><span>{units} {units === 1 ? "artículo" : "artículos"}{varias ? ` en ${partes.length} boletas` : ""}</span><span /></div>
+                {s.discount > 0 && (
+                  <>
+                    <div className="row"><span>Subtotal</span><span>{money(s.subtotal)}</span></div>
+                    <div className="row"><span>{discountLabel(s.subtotal, s.discount)}</span><span>- {money(s.discount)}</span></div>
+                  </>
+                )}
+                <div className="row total"><span>{varias ? "TOTAL GENERAL" : "TOTAL"}</span><span>{money(s.total)}</span></div>
+                {s.payments.map((p, i) => (
+                  <div key={i} className="row"><span>{p.method === "cash" ? "Efectivo" : "Transferencia"}</span><span>{money(p.amount)}</span></div>
+                ))}
+                <div className="hr" />
+                <div className="c">
+                  <div className="b">{b.footer}</div>
+                  <div className="small" style={{ marginTop: 4 }}>Comprobante no válido como factura</div>
+                </div>
+              </>
+            )}
           </div>
-        ))}
-
-        <div className="hr" />
-        <div className="row small"><span>{units} {units === 1 ? "artículo" : "artículos"}</span><span /></div>
-        {s.discount > 0 && (
-          <>
-            <div className="row"><span>Subtotal</span><span>{money(s.subtotal)}</span></div>
-            <div className="row"><span>Descuento</span><span>- {money(s.discount)}</span></div>
-          </>
-        )}
-        <div className="row total"><span>TOTAL</span><span>{money(s.total)}</span></div>
-        {s.payments.map((p, i) => (
-          <div key={i} className="row"><span>{p.method === "cash" ? "Efectivo" : "Transferencia"}</span><span>{money(p.amount)}</span></div>
-        ))}
-        <div className="hr" />
-        <div className="c">
-          <div className="b">{b.footer}</div>
-          <div className="small" style={{ marginTop: 4 }}>Comprobante no válido como factura</div>
-        </div>
-      </div>
+        );
+      })}
     </>
   );
 }

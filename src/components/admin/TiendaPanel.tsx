@@ -33,6 +33,7 @@ const EMPTY_FORM = {
   id:null as number|null, name:"", description:"", sku:"", category_id:"", supplier_id:"",
   cost_price:"", price_retail:"", price_wholesale:"", pct_retail:"", pct_wholesale:"",
   stock_quantity:"", available:true, featured:false, is_offer:false, is_new:false, image_url:"",
+  extra_urls:[] as string[],   // fotos extra del artículo NUEVO (se guardan al crearlo)
 };
 type Form = typeof EMPTY_FORM;
 
@@ -108,7 +109,7 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
       cost_price:cost, price_retail:retail, price_wholesale:wholesale,
       pct_retail:pctFrom(cost,retail), pct_wholesale:pctFrom(cost,wholesale),
       stock_quantity:String(qtyOf(p)), available:!!p.available, featured:!!p.featured, is_offer:!!p.is_offer, is_new:!!p.is_new,
-      image_url:p.image_url||"",
+      image_url:p.image_url||"", extra_urls:[],
     });
     loadExtraImages(p.id);
   };
@@ -258,6 +259,9 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
         const res = await fetch("/api/products",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
         const p = await res.json().catch(()=>({}));
         if(!res.ok){ alert(p.error||"No se pudo guardar el artículo"); return; }
+        for (const url of form.extra_urls) {
+          await fetch(`/api/products/${p.id}/images`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:url})}).catch(()=>{});
+        }
         fetchList(0);   // recarga la lista para que aparezca en su lugar
       }
       setForm(null);
@@ -281,20 +285,40 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     setLoadingImages(false);
   };
 
-  const uploadExtraPhoto = async(productId:number, file:File)=>{
-    const current = products.find((p:any)=>p.id===productId);
-    if (current && !current.image_url) return setMainPhoto(productId, file);
+  // Más fotos: se pueden elegir varias a la vez. Si todavía no hay foto principal,
+  // la primera pasa a ser la principal. En un artículo nuevo quedan en espera y se
+  // guardan al crearlo; en uno existente se guardan al instante.
+  const addExtraPhotos = async(files:File[])=>{
+    if(!form || !files.length) return;
+    const id = form.id;
+    let hasMain = !!form.image_url;
     setLoadingImages(true);
-    try {
-      const url = await uploadProductImage(file);
-      const res = await fetch(`/api/products/${productId}/images`,{
-        method:"POST",credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({image_url:url})
-      });
-      if(!res.ok){ const d=await res.json().catch(()=>({})); throw new Error(d.error||"No se pudo guardar la foto"); }
-      await loadExtraImages(productId);
-    } catch(e:any){ alert(e.message||"No se pudo subir la foto"); setLoadingImages(false); }
+    let failed = 0;
+    for (const file of files) {
+      try {
+        const url = await uploadProductImage(file);
+        if (!hasMain) {
+          hasMain = true;
+          if (id) { if (await patchProduct(id,{image_url:url})) setForm(f=>f&&f.id===id?{...f,image_url:url}:f); }
+          else setForm(f=>f?{...f,image_url:url}:f);
+          continue;
+        }
+        if (id) {
+          const res = await fetch(`/api/products/${id}/images`,{
+            method:"POST",credentials:"include",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({image_url:url})
+          });
+          if(!res.ok) throw new Error();
+          const img = await res.json();
+          setExtraImages(prev=>[...prev,img]);
+        } else {
+          setForm(f=>f?{...f,extra_urls:[...f.extra_urls,url]}:f);
+        }
+      } catch { failed++; }
+    }
+    setLoadingImages(false);
+    if (failed) alert(failed===1?"Una foto no se pudo subir.":`${failed} fotos no se pudieron subir.`);
   };
 
   const deleteExtraPhoto = async(productId:number, imageId:number)=>{
@@ -858,25 +882,22 @@ ${lines}
                   </label>
                   {form.id ? <p className="tp-hint">La foto se guarda al instante.</p> : <p className="tp-hint">Se guarda junto con el artículo.</p>}
 
-                  {form.id&&(
-                    <>
-                      <p className="tp-lbl" style={{marginTop:14}}>Más fotos</p>
-                      {loadingImages ? <p className="tp-hint">Cargando…</p> : (
-                        <div className="tp-extras">
-                          {extraImages.map((img:any)=>(
-                            <div key={img.id} className="tp-extra">
-                              <img src={img.image_url} alt=""/>
-                              <button type="button" onClick={()=>deleteExtraPhoto(form.id!, img.id)} aria-label="Quitar foto">×</button>
-                            </div>
-                          ))}
-                          <label className="tp-extra add" title="Agregar foto">+
-                            <input type="file" accept="image/*" style={{display:"none"}}
-                              onChange={e=>{const f=e.target.files?.[0]; if(f) uploadExtraPhoto(form.id!,f); e.target.value="";}}/>
-                          </label>
-                        </div>
-                      )}
-                    </>
-                  )}
+                  <p className="tp-lbl" style={{marginTop:14}}>Más fotos</p>
+                  <div className="tp-extras">
+                    {(form.id ? extraImages : form.extra_urls.map((u,i)=>({id:i,image_url:u}))).map((img:any)=>(
+                      <div key={img.id} className="tp-extra">
+                        <img src={img.image_url} alt=""/>
+                        <button type="button" aria-label="Quitar foto"
+                          onClick={()=>form.id ? deleteExtraPhoto(form.id, img.id) : setForm(f=>f?{...f,extra_urls:f.extra_urls.filter((_,i)=>i!==img.id)}:f)}>×</button>
+                      </div>
+                    ))}
+                    <label className={`tp-extra add${loadingImages?" busy":""}`} title="Agregar fotos (podés elegir varias)">
+                      {loadingImages ? "…" : "+"}
+                      <input type="file" accept="image/*" multiple style={{display:"none"}} disabled={loadingImages}
+                        onChange={e=>{ const fs=Array.from(e.target.files||[]); e.target.value=""; addExtraPhotos(fs); }}/>
+                    </label>
+                  </div>
+                  <p className="tp-hint">Podés elegir varias fotos a la vez.</p>
                 </aside>
 
                 {/* Columna de datos */}
@@ -1122,6 +1143,7 @@ const CSS = `
 .tp-extra button{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:2px solid #fff;background:#ef4444;color:#fff;font-size:13px;line-height:1;cursor:pointer;padding:0}
 .tp-extra.add{border:2px dashed #d1d5db;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:22px;cursor:pointer;border-radius:8px}
 .tp-extra.add:hover{border-color:#22d3ee;color:#0e7490}
+.tp-extra.add.busy{cursor:wait;opacity:.6}
 .tp-fields{display:grid;gap:14px;min-width:0}
 .tp-fields fieldset{border:1px solid #eef0f2;border-radius:14px;padding:12px 14px 14px;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;min-width:0}
 .tp-fields legend{font-size:11px;font-weight:700;color:#0e7490;text-transform:uppercase;letter-spacing:.05em;padding:0 6px}
