@@ -366,7 +366,10 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
 
  const limpiarNombre = (s:string) => {
   const nombre = s.toString().trim().toUpperCase();
-  if (/^[XYZW]/i.test(nombre)) return "IGNORE_PRODUCT";
+  // Se ignoran SOLO los que el sistema viejo marca como repetidos con la letra doble
+  // adelante ("ZZ ...", "XX ...", "WW ...", "YY ..."). Antes se ignoraba cualquier nombre
+  // que empezara con X, Y, Z o W y se perdían productos como "ZAPATILLA" o "XIAOMI".
+  if (/^(ZZ|WW|YY)|^XX(?!L)/.test(nombre)) return "IGNORE_PRODUCT";   // "XXL" (talle) sí se importa
   return nombre.replace(/\s+/g, " ").trim();
 };
 
