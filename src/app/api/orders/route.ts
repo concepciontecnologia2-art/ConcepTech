@@ -10,10 +10,58 @@ import { requireAdmin, errorResponse, withTransaction, PosError, toCents, fromCe
 import { limitByIp } from "@/lib/ratelimit";
 export const dynamic = "force-dynamic";
 
+// GET ?offset=0&limit=10&f=all|pending|confirmed|unpaid|completed|cancelled&q=texto
+//   → { items, total, counts, sums }  — de a poco (no trae todos los pedidos de una)
+//   counts: cuántos pedidos hay en cada filtro · sums: cobrado / por cobrar (de todos)
+const ORDER_FILTERS: Record<string, string> = {
+  all: "TRUE",
+  pending: "status = 'pending'",
+  confirmed: "status = 'confirmed'",
+  unpaid: "NOT paid AND status <> 'cancelled'",
+  completed: "status = 'completed'",
+  cancelled: "status = 'cancelled'",
+};
+
 export async function GET(req: NextRequest) {
   const unauth = requireAdmin(req); if (unauth) return unauth;
-  const orders = await query(`SELECT * FROM orders ORDER BY created_at DESC`);
-  return NextResponse.json(orders);
+  try {
+    const sp = req.nextUrl.searchParams;
+    const limit = Math.min(50, Math.max(1, Number(sp.get("limit")) || 10));
+    const offset = Math.max(0, Number(sp.get("offset")) || 0);
+    const f = ORDER_FILTERS[sp.get("f") || "all"] ? sp.get("f") || "all" : "all";
+    const q = (sp.get("q") || "").trim().slice(0, 80);
+
+    const where = [ORDER_FILTERS[f]];
+    const params: any[] = [];
+    if (q) {
+      params.push(`%${q}%`);
+      const n = Number(q.replace("#", ""));
+      where.push(`(customer_name ILIKE $1 OR phone ILIKE $1${Number.isInteger(n) && n > 0 ? ` OR id = ${n}` : ""})`);
+    }
+    const w = where.join(" AND ");
+
+    const [items, total, stats] = await Promise.all([
+      query(`SELECT * FROM orders WHERE ${w} ORDER BY created_at DESC, id DESC
+             LIMIT ${limit} OFFSET ${offset}`, params),
+      query(`SELECT COUNT(*)::int AS n FROM orders WHERE ${w}`, params),
+      // Contadores y totales de TODOS los pedidos en una sola pasada
+      query(`SELECT COUNT(*)::int AS "all",
+                    COUNT(*) FILTER (WHERE ${ORDER_FILTERS.pending})::int   AS pending,
+                    COUNT(*) FILTER (WHERE ${ORDER_FILTERS.confirmed})::int AS confirmed,
+                    COUNT(*) FILTER (WHERE ${ORDER_FILTERS.unpaid})::int    AS unpaid,
+                    COUNT(*) FILTER (WHERE ${ORDER_FILTERS.completed})::int AS completed,
+                    COUNT(*) FILTER (WHERE ${ORDER_FILTERS.cancelled})::int AS cancelled,
+                    COALESCE(SUM(total) FILTER (WHERE paid), 0)::float AS paid_total,
+                    COALESCE(SUM(total) FILTER (WHERE ${ORDER_FILTERS.unpaid}), 0)::float AS unpaid_total
+             FROM orders`),
+    ]);
+    const st: any = stats[0] || {};
+    return NextResponse.json({
+      items, total: (total[0] as any)?.n ?? 0,
+      counts: { all: st.all, pending: st.pending, confirmed: st.confirmed, unpaid: st.unpaid, completed: st.completed, cancelled: st.cancelled },
+      sums: { paid: st.paid_total, unpaid: st.unpaid_total },
+    });
+  } catch (e) { return errorResponse(e); }
 }
 
 export async function POST(req: NextRequest) {

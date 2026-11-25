@@ -35,7 +35,7 @@ const CSS = `
 
 export default function ArticulosConsulta({ onEdit }: { onEdit?: () => void }) {
   // Se piden de a 10 a la base; la búsqueda espera 350 ms después de la última letra
-  const PAGE = 10;
+  const PAGE = 50;   // de a 50 (la base responde igual de rápido; las fotos se cargan a medida que se ven)
   const [list, setList] = useState<P[]>([]);
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -111,7 +111,7 @@ export default function ArticulosConsulta({ onEdit }: { onEdit?: () => void }) {
           const col = st <= 0 ? ["#b42318", "#fee4e2"] : st <= 3 ? ["#b45309", "#fff4e5"] : ["#047857", "rgba(16,185,129,.12)"];
           return (
             <div key={p.id} className="ac-row">
-              {p.image_url ? <img src={p.image_url} alt="" className="ac-img" /> : <div className="ac-img" />}
+              {p.image_url ? <img src={p.image_url} alt="" className="ac-img" loading="lazy" decoding="async" /> : <div className="ac-img" />}
               <div style={{ minWidth: 0 }}>
                 <div className="ac-name">{p.name}</div>
                 <div className="ac-sub">

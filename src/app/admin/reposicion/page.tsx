@@ -9,7 +9,7 @@
 // Vista: a la izquierda los proveedores; a la derecha sus productos para tildar.
 // Abajo, la barra con lo elegido y el botón para ver y mandar el mensaje.
 // ═══════════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { buildGroupMessage, type GroupSection } from "@/lib/reposicion";
 import { sendToGroup, copyText } from "@/lib/grupoWhatsapp";
@@ -18,13 +18,20 @@ type Item = {
   product_id: number; name: string; sku: string | null; image_url: string | null;
   stock: number; min_stock: number; suggested: number;
   pending: { order_id: number; sent_at: string; quantity: number } | null;
-  supplier_name?: string | null;
+  supplier_name?: string | null;    // proveedor desactivado
+  sup: number; sup_name: string | null;
 };
-type Sup = { id: number; name: string; contact_name: string | null; whatsapp: string | null; items: Item[] };
+// Resumen por proveedor: los productos se piden aparte, de a 15
+type Sup = { id: number; name: string; contact_name: string | null; whatsapp: string | null; total: number; pending: number };
+const PAGE = 15;
 type Order = { id: number; supplier_id: number | null; supplier_name: string | null;
                sent_at: string; message_text: string | null; items: { product_id: number | null; name: string; quantity: number }[] };
-type Data = { threshold: number; suppliers: Sup[]; noSupplier: Item[]; openOrders: Order[]; group_url: string | null };
-type Sel = Record<number, { on: boolean; qty: number }>;   // por producto
+type Data = { threshold: number; suppliers: Sup[]; openOrders: Order[]; group_url: string | null };
+// Lo elegido, por producto. Se guarda el nombre y el proveedor para armar el mensaje
+// sin tener que traer todos los productos de la base.
+type SelItem = { on: boolean; qty: number; name?: string; sku?: string | null; sup?: number; supName?: string };
+type Sel = Record<number, SelItem>;
+const selFrom = (i: Item, on: boolean, qty: number): SelItem => ({ on, qty, name: i.name, sku: i.sku, sup: i.sup, supName: i.sup_name || "Sin proveedor" });
 type View = { kind: "sup"; id: number } | { kind: "sent" };
 
 const NONE = 0; // "Sin proveedor" se maneja como un proveedor más (id 0)
@@ -153,18 +160,50 @@ const stockStyle = (stock: number) => (stock <= 0 ? { color: "#b42318", backgrou
 // ─── Productos de un proveedor (para tildar) ────────────────────────
 function SupplierItems({ s, sel, setSel, onBack }: { s: Sup; sel: Sel; setSel: (fn: (v: Sel) => Sel) => void; onBack: () => void }) {
   const [q, setQ] = useState("");
+  const [qDeb, setQDeb] = useState("");
   const [hidePending, setHidePending] = useState(true);
+  const [items, setItems] = useState<Item[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [busyAll, setBusyAll] = useState(false);
+  const req = useRef(0);
 
-  const pendingCount = s.items.filter((i) => i.pending).length;
-  const words = norm(q).split(/\s+/).filter(Boolean);
-  const shown = s.items.filter((i) => (!hidePending || !i.pending) && words.every((w) => norm(`${i.name} ${i.sku || ""} ${i.product_id}`).includes(w)));
-  const chosen = s.items.filter((i) => sel[i.product_id]?.on);
+  useEffect(() => { const t = setTimeout(() => setQDeb(q.trim()), 350); return () => clearTimeout(t); }, [q]);
+  const params = useCallback((extra: Record<string, string>) => {
+    const sp = new URLSearchParams({ supplier: String(s.id), ...extra });
+    if (qDeb) sp.set("q", qDeb);
+    if (hidePending) sp.set("hide", "1");
+    return sp.toString();
+  }, [s.id, qDeb, hidePending]);
 
-  const setAll = (on: boolean) => setSel((v) => {
-    const next = { ...v };
-    for (const i of shown) next[i.product_id] = { qty: v[i.product_id]?.qty || i.suggested, on };
-    return next;
-  });
+  // Productos de este proveedor, de a 15
+  const fetchPage = useCallback(async (offset: number) => {
+    const my = ++req.current;
+    setLoading(true);
+    try {
+      const d = await api(`/api/reposicion?${params({ offset: String(offset), limit: String(PAGE) })}`);
+      if (my !== req.current) return;
+      setItems((prev) => (offset ? [...prev, ...d.items] : d.items));
+      setTotal(d.total);
+    } catch {} finally { if (my === req.current) setLoading(false); }
+  }, [params]);
+  useEffect(() => { fetchPage(0); }, [fetchPage]);
+
+  const pendingCount = s.pending;
+  const chosenHere = Object.values(sel).filter((v) => v.on && v.sup === s.id).length;
+
+  // Marcar todos / Ninguno: se aplica a TODOS los que coinciden (no solo a los 15 que se ven)
+  const setAll = async (on: boolean) => {
+    setBusyAll(true);
+    try {
+      const d = await api(`/api/reposicion?${params({ all: "1" })}`);
+      setSel((v) => {
+        const next = { ...v };
+        for (const i of d.items as Item[]) next[i.product_id] = selFrom(i, on, v[i.product_id]?.qty || i.suggested);
+        return next;
+      });
+    } catch (e: any) { alert(e.message); } finally { setBusyAll(false); }
+  };
 
   return (
     <>
@@ -174,8 +213,8 @@ function SupplierItems({ s, sel, setSel, onBack }: { s: Sup; sel: Sel; setSel: (
           <div style={{ minWidth: 0 }}>
             <div className="rp-dname">{s.name}</div>
             <div className="rp-dsub">
-              {s.id === NONE ? "Productos para pedir que todavía no tienen proveedor" : `${s.items.length} productos con poco stock`}
-              {chosen.length > 0 && <b style={{ color: "#047857" }}> · {chosen.length} elegidos</b>}
+              {s.id === NONE ? "Productos para pedir que todavía no tienen proveedor" : `${s.total} productos con poco stock`}
+              {chosenHere > 0 && <b style={{ color: "#047857" }}> · {chosenHere} elegidos</b>}
             </div>
           </div>
         </div>
@@ -185,9 +224,9 @@ function SupplierItems({ s, sel, setSel, onBack }: { s: Sup; sel: Sel; setSel: (
       </div>
 
       <div className="rp-tools">
-        <input className="rp-in" style={{ flex: "1 1 200px", width: "auto" }} value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Buscar entre ${s.items.length} productos…`} />
-        <button className="rp-btn" onClick={() => setAll(true)}>Marcar todos</button>
-        <button className="rp-btn" onClick={() => setAll(false)}>Ninguno</button>
+        <input className="rp-in" style={{ flex: "1 1 200px", width: "auto" }} value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Buscar entre ${s.total} productos…`} />
+        <button className="rp-btn" onClick={() => setAll(true)} disabled={busyAll}>Marcar todos</button>
+        <button className="rp-btn" onClick={() => setAll(false)} disabled={busyAll}>Ninguno</button>
         {pendingCount > 0 && (
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#444", cursor: "pointer", whiteSpace: "nowrap" }}>
             <input type="checkbox" checked={hidePending} onChange={(e) => setHidePending(e.target.checked)} style={{ accentColor: "#00B4D8" }} />
@@ -197,12 +236,12 @@ function SupplierItems({ s, sel, setSel, onBack }: { s: Sup; sel: Sel; setSel: (
       </div>
 
       <div className="rp-items">
-        {shown.length === 0 && <div className="rp-empty">{q ? "Ningún producto coincide." : "Todos los productos de acá ya se pidieron."}</div>}
-        {shown.map((i) => {
+        {items.length === 0 && <div className="rp-empty">{loading || q.trim() !== qDeb ? "Cargando…" : q ? "Ningún producto coincide." : "Todos los productos de acá ya se pidieron."}</div>}
+        {items.map((i) => {
           const v = sel[i.product_id] || { on: false, qty: i.suggested };
           return (
             <label key={i.product_id} className={`rp-row ${v.on ? "" : "off"}`}>
-              <input type="checkbox" checked={v.on} onChange={(e) => setSel((all) => ({ ...all, [i.product_id]: { qty: v.qty || i.suggested, on: e.target.checked } }))}
+              <input type="checkbox" checked={v.on} onChange={(e) => setSel((all) => ({ ...all, [i.product_id]: selFrom(i, e.target.checked, v.qty || i.suggested) }))}
                 style={{ width: 17, height: 17, accentColor: "#25D366" }} />
               {i.image_url ? <img src={i.image_url} alt="" className="rp-img" /> : <div className="rp-img" />}
               <div style={{ minWidth: 0 }}>
@@ -216,13 +255,21 @@ function SupplierItems({ s, sel, setSel, onBack }: { s: Sup; sel: Sel; setSel: (
               <span className="rp-stock" style={stockStyle(i.stock)}>{i.stock <= 0 ? "Sin stock" : `Quedan ${i.stock}`}</span>
               <div className="rp-qty" onClick={(e) => e.preventDefault()}>
                 <input value={v.qty} inputMode="numeric" aria-label="Cantidad a pedir"
-                  onChange={(e) => { const n = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSel((all) => ({ ...all, [i.product_id]: { on: n > 0, qty: Math.min(n, 9999) } })); }} />
+                  onChange={(e) => { const n = parseInt(e.target.value.replace(/\D/g, "")) || 0; setSel((all) => ({ ...all, [i.product_id]: selFrom(i, n > 0, Math.min(n, 9999)) })); }} />
                 <span>u.</span>
               </div>
             </label>
           );
         })}
+        {items.length < total && (
+          <div style={{ padding: 12, textAlign: "center" }}>
+            <button className="rp-btn" onClick={() => fetchPage(items.length)} disabled={loading}>
+              {loading ? "Cargando…" : `Mostrar ${Math.min(PAGE, total - items.length)} más`}
+            </button>
+          </div>
+        )}
       </div>
+      {total > 0 && <div className="rp-foot"><span>Mostrando {items.length} de {total}</span></div>}
     </>
   );
 }
@@ -301,6 +348,29 @@ export default function ReposicionPage() {
   const load = useCallback(() => {
     api("/api/reposicion").then((x: Data) => { setD(x); setErr(""); }).catch((e) => setErr(e.message));
   }, []);
+
+  // Lo elegido se revisa contra la base: se completa el nombre/proveedor y se sacan
+  // los que ya no hay que pedir (por ejemplo, porque entró stock). Solo se piden esos ids.
+  useEffect(() => {
+    if (!d) return;
+    const ids = Object.entries(sel).filter(([, v]) => v.on).map(([k]) => k);
+    if (!ids.length) return;
+    let alive = true;
+    api(`/api/reposicion?ids=${ids.join(",")}`).then((r: { items: Item[] }) => {
+      if (!alive) return;
+      const ok = new Map(r.items.map((i) => [i.product_id, i]));
+      setSel((v) => {
+        const next: Sel = {};
+        for (const [k, x] of Object.entries(v)) {
+          const i = ok.get(Number(k));
+          if (x.on && i) next[Number(k)] = selFrom(i, true, x.qty);
+          else if (!x.on && x.qty) next[Number(k)] = x;
+        }
+        return next;
+      });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [d]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const on = () => { if (!document.hidden) load(); };
@@ -308,11 +378,9 @@ export default function ReposicionPage() {
     return () => document.removeEventListener("visibilitychange", on);
   }, [load]);
 
-  // Proveedores + "Sin proveedor" como uno más
-  const groups: Sup[] = useMemo(() => !d ? [] : [
-    ...d.suppliers,
-    ...(d.noSupplier.length ? [{ id: NONE, name: "Sin proveedor", contact_name: null, whatsapp: null, items: d.noSupplier }] : []),
-  ], [d]);
+  // Proveedores ("Sin proveedor" viene como id 0)
+  const groups: Sup[] = useMemo(() => d?.suppliers || [], [d]);
+  const todoOf = (s: Sup) => s.total - s.pending;
 
   // Elegir el primero (o el del link /admin/reposicion#s12)
   useEffect(() => {
@@ -321,24 +389,31 @@ export default function ReposicionPage() {
     if (exists(view)) return;
     const hash = Number(window.location.hash.replace("#s", ""));
     const fromHash = groups.find((s) => s.id === hash && hash > 0);
-    const first = fromHash || groups.find((s) => s.items.some((i) => !i.pending)) || groups[0];
+    const first = fromHash || [...groups].sort((a, b) => todoOf(b) - todoOf(a))[0];
     if (fromHash) setMobileDetail(true);
     setView(first ? { kind: "sup", id: first.id } : d.openOrders.length ? { kind: "sent" } : null);
   }, [d, view, groups]);
 
-  // Lo elegido, separado por proveedor (solo productos que siguen en la lista)
-  const chosen = useMemo(() => groups
-    .map((g) => ({ g, items: g.items.filter((i) => sel[i.product_id]?.on && sel[i.product_id].qty > 0) }))
-    .filter((x) => x.items.length), [groups, sel]);
+  // Lo elegido, separado por proveedor (sale de lo guardado: no hace falta traer los productos)
+  const chosen = useMemo(() => {
+    const by = new Map<number, { g: { id: number; name: string }; items: { product_id: number; name: string; sku: string | null; qty: number }[] }>();
+    for (const [k, v] of Object.entries(sel)) {
+      if (!v.on || !(v.qty > 0) || !v.name) continue;
+      const sid = v.sup ?? NONE;
+      if (!by.has(sid)) by.set(sid, { g: { id: sid, name: v.supName || "Sin proveedor" }, items: [] });
+      by.get(sid)!.items.push({ product_id: Number(k), name: v.name, sku: v.sku ?? null, qty: v.qty });
+    }
+    return [...by.values()].sort((a, b) => (a.g.id === NONE ? 1 : 0) - (b.g.id === NONE ? 1 : 0) || a.g.name.localeCompare(b.g.name));
+  }, [sel]);
   const chosenCount = chosen.reduce((n, x) => n + x.items.length, 0);
-  const chosenUnits = chosen.reduce((n, x) => n + x.items.reduce((m, i) => m + sel[i.product_id].qty, 0), 0);
+  const chosenUnits = chosen.reduce((n, x) => n + x.items.reduce((m, i) => m + i.qty, 0), 0);
   const message = useMemo(() => buildGroupMessage(chosen.map(({ g, items }): GroupSection => ({
     title: g.id === NONE ? "Sin proveedor" : g.name,
-    lines: [...items].sort((a, b) => a.name.localeCompare(b.name)).map((i) => ({ name: i.name, sku: i.sku, quantity: sel[i.product_id].qty })),
-  })), { title: "Pedido de mercadería" }), [chosen, sel]);
+    lines: [...items].sort((a, b) => a.name.localeCompare(b.name)).map((i) => ({ name: i.name, sku: i.sku, quantity: i.qty })),
+  })), { title: "Pedido de mercadería" }), [chosen]);
 
   const registerSent = async (text: string) => {
-    const items = chosen.flatMap(({ items }) => items.map((i) => ({ product_id: i.product_id, quantity: sel[i.product_id].qty })));
+    const items = chosen.flatMap(({ items }) => items.map((i) => ({ product_id: i.product_id, quantity: i.qty })));
     const r = await api("/api/reposicion/orders", { method: "POST", body: JSON.stringify({ items, message: text }) });
     setComposing(false);
     setSel(() => ({}));
@@ -356,7 +431,7 @@ export default function ReposicionPage() {
 
   const supList = useMemo(() => {
     const w = norm(filter).split(/\s+/).filter(Boolean);
-    const todo = (s: Sup) => s.items.filter((i) => !i.pending).length;
+    const todo = todoOf;
     return groups
       .filter((s) => w.every((x) => norm(s.name).includes(x)))
       .sort((a, b) => (a.id === NONE ? 1 : 0) - (b.id === NONE ? 1 : 0) || (todo(b) > 0 ? 1 : 0) - (todo(a) > 0 ? 1 : 0) || todo(b) - todo(a) || a.name.localeCompare(b.name));
@@ -364,7 +439,12 @@ export default function ReposicionPage() {
 
   const open = (v: View) => { setView(v); setMobileDetail(true); setMsg(""); };
   const current = view?.kind === "sup" ? groups.find((s) => s.id === view.id) : null;
-  const totalItems = groups.reduce((n, s) => n + s.items.filter((i) => !i.pending).length, 0);
+  const totalItems = groups.reduce((n, s) => n + todoOf(s), 0);
+  const pickedBy = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const v of Object.values(sel)) if (v.on && v.sup != null) m.set(v.sup, (m.get(v.sup) || 0) + 1);
+    return m;
+  }, [sel]);
 
   return (
     <div className="rp">
@@ -403,15 +483,15 @@ export default function ReposicionPage() {
             )}
             <div className="rp-list">
               {supList.map((s) => {
-                const todo = s.items.filter((i) => !i.pending).length;
-                const picked = s.items.filter((i) => sel[i.product_id]?.on).length;
+                const todo = todoOf(s);
+                const picked = pickedBy.get(s.id) || 0;
                 return (
                   <button key={s.id} className={`rp-li ${view?.kind === "sup" && view.id === s.id ? "on" : ""}`} onClick={() => open({ kind: "sup", id: s.id })}>
                     <div className="rp-li-main">
                       <div className="rp-li-name" style={s.id === NONE ? { color: "#b45309" } : undefined}>{s.name}</div>
                       <div className="rp-li-sub">
                         {todo > 0 ? `${todo} para pedir` : "Todo pedido"}
-                        {s.items.length - todo > 0 && ` · ${s.items.length - todo} en camino`}
+                        {s.pending > 0 && ` · ${s.pending} en camino`}
                         {picked > 0 && <b style={{ color: "#047857" }}> · {picked} elegidos</b>}
                       </div>
                     </div>

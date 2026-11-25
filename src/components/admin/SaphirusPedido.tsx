@@ -6,7 +6,7 @@
 // WhatsApp al GRUPO del negocio. El borrador queda guardado en esta compu.
 // El proveedor es el que tenga "Saphirus" en el nombre (se carga en Proveedores).
 // ═══════════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { api, fmtDateTime } from "@/components/admin/pos";
 import { buildGroupMessage, saphirusBulto, saphirusSuggested } from "@/lib/reposicion";
@@ -15,12 +15,17 @@ import { sendToGroup } from "@/lib/grupoWhatsapp";
 type Supplier = { id: number; name: string; contact_name: string | null; whatsapp: string | null };
 type Product = { id: number; name: string; sku: string | null; image_url: string | null; stock: number; min_stock: number; category: string | null; pending_sent_at: string | null; pending_qty: number | null };
 type Order = { id: number; status: "sent" | "received" | "cancelled"; sent_at: string; received_at: string | null; notes: string | null; items: { name: string; quantity: number; free: boolean }[] };
-type Data = { threshold: number; suppliers: Supplier[]; supplier: Supplier | null; products: Product[]; orders: Order[]; group_url: string | null };
+type Data = { threshold: number; suppliers: Supplier[]; supplier: Supplier | null; products: Product[]; total: number;
+              counts: { total: number; low: number; low_open: number }; orders: Order[]; group_url: string | null };
+type Lite = { id: number; name: string; sku: string | null };
 type Free = { key: number; name: string; qty: number };
-type Draft = { qty: Record<number, number>; free: Free[]; note: string; v?: number };
+// qty: cantidad por producto (0 = sacado a mano) · meta: nombre de cada producto elegido, para
+// armar el mensaje sin traer todos los productos · filled: ya se cargaron los de bulto en 12
+type Draft = { qty: Record<number, number>; meta?: Record<number, { name: string; sku: string | null }>; free: Free[]; note: string; v?: number; filled?: boolean };
 
 const DRAFT_KEY = "ct_saphirus_draft";
-const emptyDraft: Draft = { qty: {}, free: [], note: "", v: 2 };
+const PAGE = 15;
+const emptyDraft: Draft = { qty: {}, meta: {}, free: [], note: "", v: 2 };
 let seq = Date.now();
 
 const loadDraft = (): Draft => {
@@ -46,59 +51,92 @@ export default function SaphirusPedido() {
   const [freeName, setFreeName] = useState("");
   const [freeQty, setFreeQty] = useState("1");
   const [sending, setSending] = useState(false);
+  // Lista de productos: de a 15, con la búsqueda y el filtro resueltos en la base
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [qDeb, setQDeb] = useState("");
+  const [listLoading, setListLoading] = useState(false);
+  const listReq = useRef(0);
 
   useEffect(() => { setDraft(loadDraft()); }, []);
   const update = (fn: (d: Draft) => Draft) => setDraft((d) => { const n = fn(d); saveDraft(n); return n; });
+  useEffect(() => { const t = setTimeout(() => setQDeb(search.trim()), 350); return () => clearTimeout(t); }, [search]);
 
+  const listParams = useCallback((offset: number) => {
+    const sp = new URLSearchParams({ offset: String(offset), limit: String(PAGE) });
+    if (supplierId) sp.set("supplier", String(supplierId));
+    if (qDeb) sp.set("q", qDeb);
+    if (onlyLow) sp.set("low", "1");
+    return sp;
+  }, [supplierId, qDeb, onlyLow]);
+
+  // Proveedor, contadores, pedidos enviados y la 1ª página
   const load = useCallback(async () => {
-    try { setData(await api(`/api/saphirus${supplierId ? `?supplier=${supplierId}` : ""}`)); setErr(""); }
-    catch (e: any) { setErr(e.message); }
-  }, [supplierId]);
+    const my = ++listReq.current;
+    try {
+      const d: Data = await api(`/api/saphirus?${listParams(0)}`);
+      setData(d); setErr("");
+      if (my === listReq.current) { setProducts(d.products); setTotal(d.total); }
+    } catch (e: any) { setErr(e.message); }
+  }, [supplierId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
 
-  const supplier = data?.supplier || null;
-  const products = data?.products || [];
+  // Otra página, o la 1ª cuando cambia la búsqueda / el filtro
+  const fetchPage = useCallback(async (offset: number) => {
+    const my = ++listReq.current;
+    setListLoading(true);
+    try {
+      const sp = listParams(offset); sp.set("page", "1");
+      const d = await api(`/api/saphirus?${sp}`);
+      if (my !== listReq.current) return;
+      setProducts((prev) => (offset ? [...prev, ...d.items] : d.items)); setTotal(d.total);
+    } catch (e: any) { setErr(e.message); } finally { if (my === listReq.current) setListLoading(false); }
+  }, [listParams]);
+  const firstList = useRef(true);
+  useEffect(() => { if (firstList.current) { firstList.current = false; return; } fetchPage(0); }, [qDeb, onlyLow]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pedidos armados antes del cambio a "bulto de 12": las cantidades que quedaron con el
-  // valor automático viejo (6, o lo que daba la fórmula anterior) en Textil / Aerosol /
-  // Varilla pasan a 12. Lo que se haya escrito a mano distinto se respeta. Corre una sola vez.
-  useEffect(() => {
-    if (!data || draft.v === 2) return;
-    update((d) => {
-      const qty = { ...d.qty };
-      for (const p of data.products) {
-        const q = qty[p.id];
-        if (!q || !saphirusBulto(p.name)) continue;
-        const viejo = Math.max(1, (p.min_stock > 2 ? p.min_stock * 2 : 6) - Math.max(0, p.stock));
-        if (q === viejo || q === 6) qty[p.id] = saphirusSuggested(p.name);
-      }
-      return { ...d, qty, v: 2 };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, draft.v]);
+  const supplier = data?.supplier || null;
+  const supQ = supplier ? `supplier=${supplier.id}&` : "";
+  const metaOf = (p: Lite) => ({ name: p.name, sku: p.sku });
 
   // Textil, Aerosol y Varilla arrancan ya con 12 (un bulto) adentro del pedido.
-  // Solo se completan los que todavía no tienen cantidad: si uno se pone en 0, queda en 0
-  // (se guarda el 0). Los que ya están pedidos y en camino no se agregan.
+  // Se pide a la base solo la lista liviana (id y nombre) de esos productos, una vez por pedido.
+  // Si uno se pone en 0, queda en 0. Los que ya están en camino no se agregan.
   // Al enviar el pedido el borrador se limpia y en el siguiente vuelven a arrancar en 12.
   useEffect(() => {
-    if (!data) return;
-    const faltan = data.products.filter((p) => saphirusBulto(p.name) && !p.pending_sent_at && !(p.id in draft.qty));
-    if (!faltan.length) return;
-    update((d) => {
-      const qty = { ...d.qty };
-      for (const p of faltan) if (!(p.id in qty)) qty[p.id] = saphirusSuggested(p.name);
-      return { ...d, qty };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, draft.qty]);
-  const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
-  const low = products.filter((p) => p.stock <= (data?.threshold ?? 2));
+    if (!data || draft.filled) return;
+    let alive = true;
+    api(`/api/saphirus?${supQ}lite=bulto`).then((r: { items: Lite[] }) => {
+      if (!alive) return;
+      update((d) => {
+        const qty = { ...d.qty }, meta = { ...(d.meta || {}) };
+        for (const p of r.items) if (!(p.id in qty)) { qty[p.id] = saphirusSuggested(p.name); meta[p.id] = metaOf(p); }
+        return { ...d, qty, meta, filled: true };
+      });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [data, draft.filled]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = products
-    .filter((p) => !onlyLow || p.stock <= (data?.threshold ?? 2))
-    .filter((p) => words.every((w) => `${p.name} ${p.sku || ""} ${p.category || ""}`.toLowerCase().includes(w)));
+  // Pedidos guardados en la compu desde antes: se completan los nombres que falten
+  // (y se sacan los productos que ya no existen). Solo se piden esos ids.
+  useEffect(() => {
+    if (!data) return;
+    const falta = Object.entries(draft.qty).filter(([id, q]) => q > 0 && !draft.meta?.[Number(id)]).map(([id]) => id);
+    if (!falta.length) return;
+    let alive = true;
+    api(`/api/saphirus?${supQ}ids=${falta.join(",")}`).then((r: { items: Lite[] }) => {
+      if (!alive) return;
+      const ok = new Map(r.items.map((p) => [p.id, p]));
+      update((d) => {
+        const qty = { ...d.qty }, meta = { ...(d.meta || {}) };
+        for (const id of falta.map(Number)) { const p = ok.get(id); if (p) meta[id] = metaOf(p); else delete qty[id]; }
+        return { ...d, qty, meta };
+      });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const shown = products;
 
   // + / −: los que vienen en bulto (Textil, Aerosol, Varilla) van de a 12; el resto, de a 1.
   // Escribiendo se puede poner cualquier cantidad.
@@ -113,18 +151,18 @@ export default function SaphirusPedido() {
     return q - 1;
   };
 
-  const setQty = (id: number, q: number) => update((d) => {
-    const qty = { ...d.qty };
-    if (q > 0) qty[id] = Math.min(9999, q);
-    else if (saphirusBulto(byId.get(id)?.name || "")) qty[id] = 0;   // queda en 0 (no se vuelve a poner 12 solo)
-    else delete qty[id];
-    return { ...d, qty };
+  const setQty = (p: Lite, q: number) => update((d) => {
+    const qty = { ...d.qty }, meta = { ...(d.meta || {}) };
+    if (q > 0) { qty[p.id] = Math.min(9999, q); meta[p.id] = metaOf(p); }
+    else if (saphirusBulto(p.name)) qty[p.id] = 0;   // queda en 0 (no se vuelve a poner 12 solo)
+    else { delete qty[p.id]; delete meta[p.id]; }
+    return { ...d, qty, meta };
   });
 
-  // Renglones del pedido (los productos que ya no existen se descartan solos)
+  // Renglones del pedido: salen de lo guardado (nombre incluido), no de la página que se ve
   const prodLines = Object.entries(draft.qty)
-    .map(([id, q]) => ({ p: byId.get(Number(id)), q }))
-    .filter((l): l is { p: Product; q: number } => !!l.p && l.q > 0)
+    .map(([id, q]) => ({ p: draft.meta?.[Number(id)] ? { id: Number(id), ...draft.meta![Number(id)] } : null, q }))
+    .filter((l): l is { p: Lite; q: number } => !!l.p && l.q > 0)
     .sort((a, b) => a.p.name.localeCompare(b.p.name));
   const lineCount = prodLines.length + draft.free.length;
   const units = prodLines.reduce((a, l) => a + l.q, 0) + draft.free.reduce((a, f) => a + f.qty, 0);
@@ -143,11 +181,17 @@ export default function SaphirusPedido() {
     setFreeName(""); setFreeQty("1");
   };
 
-  const addAllLow = () => update((d) => {
-    const qty = { ...d.qty };
-    for (const p of low) if (!qty[p.id] && !p.pending_sent_at) qty[p.id] = saphirusSuggested(p.name);
-    return { ...d, qty };
-  });
+  // "Agregar todos los que hay que reponer": pide a la base solo id y nombre de esos productos
+  const addAllLow = async () => {
+    try {
+      const r: { items: Lite[] } = await api(`/api/saphirus?${supQ}lite=low`);
+      update((d) => {
+        const qty = { ...d.qty }, meta = { ...(d.meta || {}) };
+        for (const p of r.items) if (!qty[p.id]) { qty[p.id] = saphirusSuggested(p.name); meta[p.id] = metaOf(p); }
+        return { ...d, qty, meta };
+      });
+    } catch (e: any) { setErr(e.message); }
+  };
 
   const send = async () => {
     if (!supplier || !lineCount) return;
@@ -162,10 +206,11 @@ export default function SaphirusPedido() {
           items: [...prodLines.map((l) => ({ product_id: l.p.id, quantity: l.q })), ...draft.free.map((f) => ({ name: f.name, quantity: f.qty }))],
         }),
       });
-      update(() => emptyDraft);
       setMsg("Pedido enviado y guardado ✓");
       setTimeout(() => setMsg(""), 4000);
-      load();
+      // Primero se recarga (así lo recién pedido figura "en camino") y después se limpia el borrador
+      await load();
+      update(() => emptyDraft);
     } catch (e: any) { setErr(`Se abrió WhatsApp, pero no se pudo guardar el pedido: ${e.message}`); }
     finally { setSending(false); }
   };
@@ -176,7 +221,9 @@ export default function SaphirusPedido() {
     catch (e: any) { setErr(e.message); }
   };
 
-  if (!data && !err) return <p style={{ color: "#666", padding: 10 }}>Cargando…</p>;
+  if (!data) return err
+    ? <div style={{ padding: 10 }}><p style={{ color: "#b91c1c", fontSize: 14 }}>No se pudo cargar: {err}</p><button onClick={load} style={{ marginTop: 8 }}>Reintentar</button></div>
+    : <p style={{ color: "#666", padding: 10 }}>Cargando…</p>;
 
   // Sin proveedor Saphirus cargado
   if (data && !data.suppliers.length) return (
@@ -220,9 +267,9 @@ export default function SaphirusPedido() {
         <div className="sp-card sp-list">
           <div className="sp-bar">
             <input className="sp-in" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar aroma o producto…" />
-            <label className="sp-chk"><input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> Solo para reponer ({low.length})</label>
+            <label className="sp-chk"><input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> Solo para reponer ({data?.counts.low ?? 0})</label>
           </div>
-          {low.some((p) => !draft.qty[p.id] && !p.pending_sent_at) && (
+          {(data?.counts.low_open ?? 0) > 0 && (
             <button className="sp-btn" onClick={addAllLow}>＋ Agregar todos los que hay que reponer</button>
           )}
           <div className="sp-rows">
@@ -239,17 +286,25 @@ export default function SaphirusPedido() {
                     </div>
                   </div>
                   <div className="sp-step">
-                    <button onClick={() => setQty(p.id, stepDown(q, p.name))} disabled={!q} aria-label={saphirusBulto(p.name) ? "Un bulto menos" : "Menos"}>−</button>
-                    <input inputMode="numeric" value={q || ""} placeholder="0" onChange={(e) => setQty(p.id, Math.round(Number(e.target.value.replace(/\D/g, "")) || 0))} />
-                    <button onClick={() => setQty(p.id, stepUp(q, p.name))} aria-label={saphirusBulto(p.name) ? "Un bulto más (12)" : "Más"}>+</button>
+                    <button onClick={() => setQty(p, stepDown(q, p.name))} disabled={!q} aria-label={saphirusBulto(p.name) ? "Un bulto menos" : "Menos"}>−</button>
+                    <input inputMode="numeric" value={q || ""} placeholder="0" onChange={(e) => setQty(p, Math.round(Number(e.target.value.replace(/\D/g, "")) || 0))} />
+                    <button onClick={() => setQty(p, stepUp(q, p.name))} aria-label={saphirusBulto(p.name) ? "Un bulto más (12)" : "Más"}>+</button>
                   </div>
                 </div>
               );
             })}
             {!shown.length && (
               <p className="sp-empty">
-                {products.length ? "No hay productos con ese filtro." : "No hay productos de Saphirus cargados. Asignales este proveedor en Artículos, o usá los renglones libres."}
+                {listLoading || search.trim() !== qDeb ? "Buscando…" : (data?.counts.total ?? 0) > 0 ? "No hay productos con ese filtro." : "No hay productos de Saphirus cargados. Asignales este proveedor en Artículos, o usá los renglones libres."}
               </p>
+            )}
+            {products.length < total && (
+              <div style={{ textAlign: "center", padding: "8px 0" }}>
+                <button className="sp-btn" onClick={() => fetchPage(products.length)} disabled={listLoading}>
+                  {listLoading ? "Cargando…" : `Mostrar ${Math.min(PAGE, total - products.length)} más`}
+                </button>
+                <p className="sp-sub" style={{ fontSize: 11, marginTop: 4 }}>Mostrando {products.length} de {total}</p>
+              </div>
             )}
           </div>
         </div>
@@ -265,7 +320,7 @@ export default function SaphirusPedido() {
             {prodLines.map((l) => (
               <div key={l.p.id} className="sp-line">
                 <b>{l.q}</b><span>{l.p.name}</span>
-                <button onClick={() => setQty(l.p.id, 0)} aria-label="Quitar">×</button>
+                <button onClick={() => setQty(l.p, 0)} aria-label="Quitar">×</button>
               </div>
             ))}
             {draft.free.map((f) => (
@@ -299,7 +354,7 @@ export default function SaphirusPedido() {
           )}
 
           <div style={{ display: "flex", gap: 8 }}>
-            {lineCount > 0 && <button className="sp-btn" onClick={() => { if (confirm("¿Vaciar el pedido?")) update(() => ({ ...emptyDraft, qty: Object.fromEntries(products.filter((p) => saphirusBulto(p.name)).map((p) => [p.id, 0])) })); }}>Vaciar</button>}
+            {lineCount > 0 && <button className="sp-btn" onClick={() => { if (confirm("¿Vaciar el pedido?")) update(() => ({ ...emptyDraft, filled: true })); }}>Vaciar</button>}
             <button className="sp-btn wa" style={{ flex: 1 }} disabled={!lineCount || !supplier || sending} onClick={send}>
               <WaIcon /> {sending ? "Guardando…" : "Enviar al grupo"}
             </button>

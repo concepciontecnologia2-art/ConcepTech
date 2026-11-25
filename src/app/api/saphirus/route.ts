@@ -10,30 +10,86 @@ import { requireUser, errorResponse, withTransaction, PosError } from "@/lib/pos
 import { buildGroupMessage, REORDER_AT, SAPHIRUS_LIKE, groupUrl } from "@/lib/reposicion";
 export const dynamic = "force-dynamic";
 
+// GET ?supplier=ID                       → proveedores, últimos pedidos, contadores y la 1ª página de productos
+// GET ?supplier=ID&page=1&offset=15      → solo otra página de productos { items, total }
+//        filtros: &q=texto  &low=1 (solo para reponer)   · de a 15
+// GET ?supplier=ID&lite=bulto            → Textil/Aerosol/Varilla que no están en camino (para arrancar en 12)
+// GET ?supplier=ID&lite=low              → los que hay que reponer y no están en camino ("Agregar todos")
+// GET ?supplier=ID&ids=1,2,3             → esos productos (nombre) para el pedido guardado en la compu
+const PAGE = 15;
+// Textil, Aerosol y Varilla vienen en bulto de 12 (igual que saphirusBulto() en lib/reposicion)
+const BULTO_SQL = `translate(lower(p.name), 'áéíóúü', 'aeiouu') ~ '\\m(textil|textiles|aerosol|aerosoles|varilla|varillas)\\M'`;
+const PENDING = `EXISTS (SELECT 1 FROM supplier_order_items oi JOIN supplier_orders o ON o.id = oi.order_id
+                         WHERE oi.product_id = p.id AND o.status = 'sent')`;
+
 export async function GET(req: NextRequest) {
   const unauth = requireUser(req); if (unauth) return unauth;
   try {
+    const sp = req.nextUrl.searchParams;
     const { rows: suppliers } = await pool.query(
       `SELECT id, name, contact_name, whatsapp FROM suppliers
        WHERE active = TRUE AND name ILIKE $1 ORDER BY name`, [SAPHIRUS_LIKE]);
-    const wanted = Number(req.nextUrl.searchParams.get("supplier"));
+    const wanted = Number(sp.get("supplier"));
     const supplier = suppliers.find((s: any) => s.id === wanted) || suppliers[0] || null;
 
-    const [products, orders] = await Promise.all([
+    // Productos de Saphirus = los de ese proveedor, o con "Saphirus" en el nombre o la categoría
+    const params: any[] = [supplier?.id ?? null, SAPHIRUS_LIKE];
+    const BASE = `FROM products p LEFT JOIN categories c ON c.id = p.category_id
+                  WHERE (($1::int IS NOT NULL AND p.supplier_id = $1) OR p.name ILIKE $2 OR c.name ILIKE $2)`;
+
+    // ── Listas livianas (solo id y nombre) ──
+    const lite = sp.get("lite");
+    if (lite === "bulto" || lite === "low" || sp.has("ids")) {
+      let extra = "";
+      const ps = [...params];
+      if (lite === "bulto") extra = ` AND ${BULTO_SQL} AND NOT ${PENDING}`;
+      else if (lite === "low") extra = ` AND p.stock_quantity <= ${REORDER_AT} AND NOT ${PENDING}`;
+      else {
+        const ids = (sp.get("ids") || "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 2000);
+        if (!ids.length) return NextResponse.json({ items: [] });
+        ps.push(ids); extra = ` AND p.id = ANY($3::int[])`;
+      }
+      const { rows } = await pool.query(`SELECT p.id, p.name, p.sku ${BASE}${extra} ORDER BY p.name LIMIT 2000`, ps);
+      return NextResponse.json({ items: rows });
+    }
+
+    // ── Una página de productos (con búsqueda y filtro) ──
+    const offset = Math.max(0, Number(sp.get("offset")) || 0);
+    const limit = Math.min(50, Math.max(1, Number(sp.get("limit")) || PAGE));
+    const where: string[] = [];
+    const ps = [...params];
+    if (sp.get("low") === "1") where.push(`p.stock_quantity <= ${REORDER_AT}`);
+    for (const w of (sp.get("q") || "").trim().slice(0, 80).split(/\s+/).filter(Boolean).slice(0, 6)) {
+      ps.push(`%${w}%`);
+      where.push(`(p.name ILIKE $${ps.length} OR COALESCE(p.sku,'') ILIKE $${ps.length} OR COALESCE(c.name,'') ILIKE $${ps.length})`);
+    }
+    const filtered = `${BASE}${where.length ? ` AND ${where.join(" AND ")}` : ""}`;
+    const pageQ = Promise.all([
       pool.query(
         `SELECT p.id, p.name, p.sku, p.image_url, p.stock_quantity AS stock, p.min_stock,
                 c.name AS category,
                 po.sent_at AS pending_sent_at, po.quantity AS pending_qty
-         FROM products p
-         LEFT JOIN categories c ON c.id = p.category_id
-         LEFT JOIN LATERAL (
+         ${filtered.replace("WHERE", `LEFT JOIN LATERAL (
            SELECT o.sent_at, oi.quantity FROM supplier_order_items oi JOIN supplier_orders o ON o.id = oi.order_id
            WHERE oi.product_id = p.id AND o.status = 'sent' ORDER BY o.sent_at DESC LIMIT 1
          ) po ON TRUE
-         WHERE ($1::int IS NOT NULL AND p.supplier_id = $1) OR p.name ILIKE $2 OR c.name ILIKE $2
-         ORDER BY (p.stock_quantity <= $3) DESC, p.name
-         LIMIT 1000`,
-        [supplier?.id ?? null, SAPHIRUS_LIKE, REORDER_AT]),
+         WHERE`)}
+         ORDER BY (p.stock_quantity <= ${REORDER_AT}) DESC, p.name, p.id
+         LIMIT ${limit} OFFSET ${offset}`, ps),
+      pool.query(`SELECT COUNT(*)::int AS n ${filtered}`, ps),
+    ]);
+    if (sp.get("page") === "1") {
+      const [items, total] = await pageQ;
+      return NextResponse.json({ items: items.rows, total: total.rows[0].n });
+    }
+
+    const [[items, total], counts, orders] = await Promise.all([
+      pageQ,
+      pool.query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE p.stock_quantity <= ${REORDER_AT})::int AS low,
+                COUNT(*) FILTER (WHERE p.stock_quantity <= ${REORDER_AT} AND NOT ${PENDING})::int AS low_open
+         ${BASE}`, params),
       supplier
         ? pool.query(
             `SELECT o.id, o.status, o.sent_at, o.received_at, o.notes,
@@ -45,7 +101,11 @@ export async function GET(req: NextRequest) {
         : Promise.resolve({ rows: [] as any[] }),
     ]);
 
-    return NextResponse.json({ threshold: REORDER_AT, suppliers, supplier, products: products.rows, orders: orders.rows, group_url: groupUrl() });
+    return NextResponse.json({
+      threshold: REORDER_AT, suppliers, supplier,
+      products: items.rows, total: total.rows[0].n, counts: counts.rows[0],
+      orders: orders.rows, group_url: groupUrl(),
+    });
   } catch (e) { return errorResponse(e); }
 }
 

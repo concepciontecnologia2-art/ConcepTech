@@ -43,7 +43,14 @@ const NO_IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http
 
 export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNew?: boolean }) {
   const router = useRouter();
+  // Pedidos web: solo los que se ven (se piden de a 10), más contadores y totales que calcula la base
   const [orders, setOrders]         = useState<any[]>([]);
+  const [ordTotal, setOrdTotal]     = useState(0);
+  const [ordCounts, setOrdCounts]   = useState<Record<string, number>>({});
+  const [ordSums, setOrdSums]       = useState<{ paid:number; unpaid:number }>({ paid:0, unpaid:0 });
+  const [ordLoading, setOrdLoading] = useState(false);
+  const [ordQDeb, setOrdQDeb]       = useState("");
+  const ordReq = useRef(0);
   // Artículos: solo los que se ven en pantalla (se piden de a 10 a la base, no el catálogo entero)
   const [products, setProducts]     = useState<any[]>([]);
   const [prodTotal, setProdTotal]   = useState(0);
@@ -128,12 +135,31 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     return ()=>window.removeEventListener("keydown",onKey);
   },[tab,form,openNewForm]);
 
-  const fetchOrders = useCallback(async () => {
+  const ORD_PAGE = 10;
+  // Pedidos web de a 10. En el Resumen solo se piden los últimos 6.
+  const fetchOrderPage = useCallback(async (offset:number) => {
+    const my = ++ordReq.current;
+    const sp = new URLSearchParams({ offset:String(offset), limit:String(tab==="dashboard" ? 6 : ORD_PAGE) });
+    if (tab==="orders") { if (ordFilter!=="all") sp.set("f", ordFilter); if (ordQDeb) sp.set("q", ordQDeb); }
+    setOrdLoading(true);
     try {
-      const res = await fetch("/api/orders",{credentials:"include"});
-      if(res.ok) { const d = await res.json(); setOrders(Array.isArray(d)?d:[]); }
+      const res = await fetch(`/api/orders?${sp}`,{credentials:"include",cache:"no-store"});
+      const d = await res.json().catch(()=>null);
+      if (my !== ordReq.current || !res.ok || !d || !Array.isArray(d.items)) return;
+      setOrders(prev => offset ? [...prev, ...d.items] : d.items);
+      setOrdTotal(d.total); setOrdCounts(d.counts||{}); setOrdSums(d.sums||{paid:0,unpaid:0});
+    } catch {} finally { if (my === ordReq.current) setOrdLoading(false); }
+  }, [tab, ordFilter, ordQDeb]);
+  const fetchOrders = useCallback(() => fetchOrderPage(0), [fetchOrderPage]);
+  // Después de cambiar un pedido: solo se actualizan contadores y totales (no se recarga la lista)
+  const refreshOrderStats = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/orders?limit=1`,{credentials:"include",cache:"no-store"});
+      const d = await res.json().catch(()=>null);
+      if (res.ok && d) { setOrdCounts(d.counts||{}); setOrdSums(d.sums||{paid:0,unpaid:0}); }
     } catch {}
   }, []);
+  useEffect(()=>{ const t = setTimeout(()=>setOrdQDeb(ordSearch.trim()), 350); return ()=>clearTimeout(t); },[ordSearch]);
 
   // Espera 350 ms después de la última letra antes de buscar (no consulta por cada tecla)
   useEffect(()=>{ const t = setTimeout(()=>setQDeb(searchProd.trim()), 350); return ()=>clearTimeout(t); },[searchProd]);
@@ -179,7 +205,8 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     } catch {}
   }, []);
 
-  // Cada pestaña pide solo lo que muestra
+  // Cada pestaña pide solo lo que muestra (en Pedidos, al cambiar filtro o búsqueda
+  // cambia fetchOrders y se vuelve a pedir la primera página)
   useEffect(() => {
     let isMounted = true;
     const jobs = tab==="dashboard" ? [fetchOrders(), fetchDash()] : tab==="orders" ? [fetchOrders()] : [];
@@ -195,6 +222,7 @@ export default function TiendaPanel({ tab, openNew = false }: { tab: Tab; openNe
     const res = await fetch(`/api/orders/${id}`,{method:"PATCH",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
     if(!res.ok){ const d = await res.json().catch(()=>({})); alert(d.error||"No se pudo actualizar el pedido"); return; }
     setOrders(prev=>prev.map(o=>o.id===id?{...o,...data}:o));
+    refreshOrderStats();
     window.dispatchEvent(new Event("admin:refresh-badges"));
   };
 
@@ -533,9 +561,9 @@ ${lines}
   };
 
   // ── Números ─────────────────────────────────────────────
-  const totalPaid    = orders.filter(o=>o.paid).reduce((s,o)=>s+Number(o.total),0);
-  const totalPending = orders.filter(o=>!o.paid&&o.status!=="cancelled").reduce((s,o)=>s+Number(o.total),0);
-  const pendingCount = orders.filter(o=>o.status==="pending").length;
+  const totalPaid    = ordSums.paid;
+  const totalPending = ordSums.unpaid;
+  const pendingCount = ordCounts.pending ?? 0;
   const lowStock     = dash.low;
   // En "Sin foto", el que ya tiene foto se saca de la lista al instante
   const shownProds   = tab==="sinfoto" ? products.filter((p:any)=>!p.image_url) : products;
@@ -551,18 +579,13 @@ ${lines}
     ["ocultos","Ocultos en la web"],
   ];
 
-  const ORD_FILTERS: [OrdFilter,string,(o:any)=>boolean][] = [
-    ["all","Todos",()=>true],
-    ["pending","Pendientes",o=>o.status==="pending"],
-    ["confirmed","Confirmados",o=>o.status==="confirmed"],
-    ["unpaid","Sin pagar",o=>!o.paid&&o.status!=="cancelled"],
-    ["completed","Completados",o=>o.status==="completed"],
-    ["cancelled","Cancelados",o=>o.status==="cancelled"],
+  // El filtro y la búsqueda los resuelve la base (acá llegan ya filtrados, de a 10)
+  const ORD_FILTERS: [OrdFilter,string][] = [
+    ["all","Todos"], ["pending","Pendientes"], ["confirmed","Confirmados"],
+    ["unpaid","Sin pagar"], ["completed","Completados"], ["cancelled","Cancelados"],
   ];
-  const oq = ordSearch.trim().toLowerCase();
-  const ordersShown = orders
-    .filter(ORD_FILTERS.find(f=>f[0]===ordFilter)![2])
-    .filter((o:any)=>!oq || String(o.customer_name||"").toLowerCase().includes(oq) || String(o.phone||"").includes(oq) || String(o.id)===oq.replace("#",""));
+  const ordersShown = orders;
+  const ordSearching = ordLoading || ordSearch.trim() !== ordQDeb;
 
   if(loading) return <p style={{color:"#666",padding:20}}>Cargando...</p>;
 
@@ -599,8 +622,8 @@ ${lines}
             </div>
             <div className="tp-kpis">
               <div className="tp-kpi"><span>Cobrado</span><b style={{color:"#047857"}}>{fmt(totalPaid)}</b><small>pedidos marcados como pagados</small></div>
-              <div className="tp-kpi"><span>Por cobrar</span><b style={{color:"#b45309"}}>{fmt(totalPending)}</b><small>{orders.filter(o=>!o.paid&&o.status!=="cancelled").length} pedidos sin pagar</small></div>
-              <button className="tp-kpi link" onClick={()=>{router.push("/admin/pedidos");}}><span>Pedidos sin confirmar</span><b style={{color:"#1d4ed8"}}>{pendingCount}</b><small>de {orders.length} pedidos en total →</small></button>
+              <div className="tp-kpi"><span>Por cobrar</span><b style={{color:"#b45309"}}>{fmt(totalPending)}</b><small>{ordCounts.unpaid ?? 0} pedidos sin pagar</small></div>
+              <button className="tp-kpi link" onClick={()=>{router.push("/admin/pedidos");}}><span>Pedidos sin confirmar</span><b style={{color:"#1d4ed8"}}>{pendingCount}</b><small>de {ordCounts.all ?? 0} pedidos en total →</small></button>
               <button className="tp-kpi link" onClick={()=>router.push("/admin/articulos?f=sinstock")}><span>Sin stock</span><b style={{color:"#b91c1c"}}>{dash.counts.sinstock ?? "–"}</b><small>{dash.counts.sinfoto ?? 0} artículos sin foto</small></button>
             </div>
 
@@ -650,17 +673,17 @@ ${lines}
             <div className="tp-head">
               <div>
                 <h2 className="tp-title">Pedidos web</h2>
-                <p className="tp-sub">{orders.length} pedidos · {pendingCount} sin confirmar · {fmt(totalPending)} por cobrar</p>
+                <p className="tp-sub">{ordCounts.all ?? 0} pedidos · {pendingCount} sin confirmar · {fmt(totalPending)} por cobrar</p>
               </div>
-              <button className="tp-btn" onClick={fetchOrders}>↻ Actualizar</button>
+              <button className="tp-btn" onClick={()=>fetchOrders()}>↻ Actualizar</button>
             </div>
 
             <div className="tp-filters">
               <input className="tp-search" value={ordSearch} onChange={e=>setOrdSearch(e.target.value)} placeholder="Buscar por cliente, teléfono o #pedido…"/>
               <div className="tp-chips">
-                {ORD_FILTERS.map(([k,l,t])=>(
+                {ORD_FILTERS.map(([k,l])=>(
                   <button key={k} className={`tp-chip${ordFilter===k?" on":""}`} onClick={()=>setOrdFilter(k)}>
-                    {l} <em>{orders.filter(t).length}</em>
+                    {l} <em>{ordCounts[k] ?? 0}</em>
                   </button>
                 ))}
               </div>
@@ -670,7 +693,7 @@ ${lines}
               <div className="tp-orow tp-ohead">
                 <span>Pedido</span><span>Cliente</span><span>Entrega</span><span className="r">Total</span><span>Estado</span><span/>
               </div>
-              {ordersShown.length===0&&<p className="tp-empty pad">No hay pedidos con ese filtro.</p>}
+              {ordersShown.length===0&&<p className="tp-empty pad">{ordSearching ? "Buscando…" : ordSearch.trim() ? "Ningún pedido coincide con la búsqueda." : "No hay pedidos con ese filtro."}</p>}
               {ordersShown.map((o:any)=>{
                 const open = expandedOrder===o.id;
                 return (
@@ -722,6 +745,7 @@ ${lines}
                 );
               })}
             </div>
+            <ListFooter shown={orders.length} total={ordTotal} loading={ordLoading} more={orders.length < ordTotal} step={ORD_PAGE} onMore={()=>fetchOrderPage(orders.length)} />
           </div>
         )}
 
