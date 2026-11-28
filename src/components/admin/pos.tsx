@@ -166,6 +166,56 @@ const saveRecent = (c: Contact) => {
 };
 const digits = (s: string) => s.replace(/\D/g, "");
 
+// Ventana de confirmación antes de cobrar: Enter confirma, Esc vuelve a la venta
+function ConfirmCharge(p: {
+  sendWa: boolean; total: number; subtotal: number; discount: number; discLabel: string;
+  lines: number; units: number; customer: string; priceList: string;
+  cash: number; transfer: number; change: number | null; print: boolean;
+  onConfirm: () => void; onCancel: () => void;
+}) {
+  const okRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    okRef.current?.focus();
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); p.onCancel(); } };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pago = p.cash > 0 && p.transfer > 0 ? `Mixto: efectivo ${fmt(p.cash)} + transferencia ${fmt(p.transfer)}`
+    : p.transfer > 0 ? "Transferencia" : "Efectivo";
+  const row = (k: string, v: React.ReactNode, color?: string) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: "1px solid #f2f4f7", fontSize: 14 }}>
+      <span style={{ color: "#667085" }}>{k}</span><b style={{ textAlign: "right", color }}>{v}</b>
+    </div>
+  );
+  return createPortal(
+    <div className="caja mo" onClick={p.onCancel} role="dialog" aria-modal="true" aria-label="Confirmar cobro">
+      <div className="mb" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: "#667085", textTransform: "uppercase", letterSpacing: ".04em" }}>Confirmar cobro</p>
+        <p style={{ fontSize: 34, fontWeight: 800, margin: "4px 0 12px", color: "#16a34a" }}>{fmt(p.total)}</p>
+        {row("Productos", `${p.lines} ${p.lines === 1 ? "artículo" : "artículos"} · ${p.units} u.`)}
+        {row("Cliente", p.customer)}
+        {row("Precios", p.priceList)}
+        {p.discount > 0 && row("Subtotal", fmt(p.subtotal))}
+        {p.discount > 0 && row(p.discLabel, `− ${fmt(p.discount)}`, "#d97706")}
+        {row("Forma de pago", pago)}
+        {p.change !== null && p.change > 0 && row("Vuelto", fmt(p.change), "#059669")}
+        <p style={{ fontSize: 12, color: "#667085", marginTop: 10 }}>
+          {p.sendWa ? "Después se abre la ventana para mandar el ticket por WhatsApp." : "Se cobra sin enviar el ticket."}
+          {p.print ? " También se imprime el ticket." : ""}
+        </p>
+        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <button onClick={p.onCancel} style={{ ...btn("gray"), flex: "0 0 auto", padding: "11px 16px" }}>Volver <span style={{ fontSize: 11, opacity: .6 }}>Esc</span></button>
+          <button ref={okRef} onClick={p.onConfirm}
+            style={{ ...btn("primary"), flex: 1, padding: "11px 16px", fontSize: 15, fontWeight: 800, background: "#16a34a", borderColor: "#16a34a" }}>
+            Confirmar cobro <span style={{ fontSize: 11, opacity: .8 }}>Enter</span>
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /** Ventana para mandar el ticket al WhatsApp del cliente.
  *  Recuerda los números: los de esta compu y los clientes guardados (con nombre). */
 export function ShareTicket({ saleId, onClose, afterSale = false }: { saleId: number; onClose: () => void; afterSale?: boolean }) {
@@ -517,7 +567,13 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
     if (c?.customer_type === "wholesale") setPriceList("wholesale");
   };
 
+  // Antes de cobrar se muestra una ventana de confirmación con el resumen de la venta.
+  // null = cerrada · true/false = se va a cobrar enviando o sin enviar el ticket por WhatsApp
+  const [confirmWa, setConfirmWa] = useState<boolean | null>(null);
+  const askCharge = (sendWa = true) => { if (canCharge) setConfirmWa(sendWa); };
+
   const charge = async (sendWa = true) => {
+    setConfirmWa(null);
     if (!canCharge) return;
     setBusy(true); setMsg(null);
     const payments = [
@@ -551,7 +607,7 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (document.querySelector(".mo")) return; // hay una ventana abierta
-      if (e.key === "F2" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); charge(true); }
+      if (e.key === "F2" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) { e.preventDefault(); askCharge(true); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -722,14 +778,14 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
           </div>
         )}
 
-        <button onClick={() => charge(true)} disabled={!canCharge}
+        <button onClick={() => askCharge(true)} disabled={!canCharge}
           style={{ ...btn("primary"), width: "100%", padding: "12px 14px", fontSize: 16, fontWeight: 800, opacity: canCharge ? 1 : .5,
                    background: "#16a34a", borderColor: "#16a34a", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
           <span>{busy ? "Registrando…" : `Cobrar ${fmt(total)}`}</span>
           {!busy && <span style={{ fontSize: 12, fontWeight: 600, opacity: .9 }}>y enviar ticket por WhatsApp</span>}
         </button>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
-          <button onClick={() => charge(false)} disabled={!canCharge}
+          <button onClick={() => askCharge(false)} disabled={!canCharge}
             style={{ border: 0, background: "none", padding: 0, fontSize: 12, color: canCharge ? "#475467" : "#c0c4cc", textDecoration: "underline", cursor: canCharge ? "pointer" : "default", fontFamily: "inherit" }}>
             Cobrar sin enviar
           </button>
@@ -757,6 +813,16 @@ export function SaleScreen({ onSold }: { onSold: () => void }) {
             )}
         {shareId && <ShareTicket saleId={shareId} afterSale onClose={() => { setShareId(null); setTimeout(() => searchRef.current?.focus(), 50); }} />}
           </div>
+        )}
+        {confirmWa !== null && (
+          <ConfirmCharge
+            sendWa={confirmWa} total={total} subtotal={subtotal} discount={discount}
+            discLabel={discMode === "%" && discRaw > 0 ? `Descuento ${String(discRaw).replace(".", ",")}%` : "Descuento"}
+            lines={cart.length} units={cart.reduce((a, l) => a + l.quantity, 0)}
+            customer={customer?.name || "Consumidor final"} priceList={priceList === "wholesale" ? "Mayorista" : "Minorista"}
+            cash={cashAmt} transfer={transferAmt} change={change} print={autoTicket}
+            onConfirm={() => charge(confirmWa)}
+            onCancel={() => { setConfirmWa(null); setTimeout(() => searchRef.current?.focus(), 50); }} />
         )}
       </div>
     </div>
