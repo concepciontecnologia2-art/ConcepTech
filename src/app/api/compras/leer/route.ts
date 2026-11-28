@@ -1,4 +1,5 @@
-// POST { images: [{ mime, data(base64) }], supplier_id? }
+// POST { images: [{ mime, data(base64) }], supplier_id? }   — fotos o PDF de la factura
+// POST { text: "celda;celda\n…", supplier_id? }              — la factura en Excel/CSV (pasada a texto en el navegador)
 //   → la IA lee la factura y se sugiere con qué artículo del sistema va cada renglón.
 //   No guarda nada: se guarda recién al confirmar en /api/compras.
 import { NextRequest, NextResponse } from "next/server";
@@ -19,10 +20,12 @@ export async function POST(req: NextRequest) {
     if (limited) return limited;
 
     const b = await req.json().catch(() => ({}));
-    if (!Array.isArray(b.images) || b.images.length === 0) throw new PosError("Subí al menos una foto");
-    if (b.images.length > 4) throw new PosError("Máximo 4 fotos por factura");
+    // Factura en Excel: llega como texto
+    const text = typeof b.text === "string" ? b.text.slice(0, 150_000) : "";
+    if (!text && (!Array.isArray(b.images) || b.images.length === 0)) throw new PosError("Subí al menos una foto, un PDF o un Excel");
+    if (!text && b.images.length > 4) throw new PosError("Máximo 4 fotos por factura");
     let size = 0;
-    const images: InvoiceImage[] = b.images.map((i: any) => {
+    const images: InvoiceImage[] = (text ? [] : b.images).map((i: any) => {
       if (!MIMES.has(i?.mime) || typeof i?.data !== "string") throw new PosError("Formato no soportado: usá foto (JPG/PNG) o PDF");
       if (!/^[A-Za-z0-9+/=]+$/.test(i.data.slice(0, 200))) throw new PosError("Archivo inválido");
       size += i.data.length;
@@ -38,7 +41,7 @@ export async function POST(req: NextRequest) {
        FROM categories c LEFT JOIN subcategories s ON s.category_id = c.id
        GROUP BY c.id ORDER BY c.sort_order, c.name`);
     const t0 = Date.now();
-    const { data, raw } = await readInvoice(images, cats);
+    const { data, raw } = await readInvoice(images, cats, text || undefined);
 
     const [{ rows: products }, { rows: suppliers }] = await Promise.all([
       pool.query(`SELECT id, name, sku, supplier_id, category_id FROM products`),

@@ -181,13 +181,17 @@ export async function askGemini(parts: unknown[], schema: unknown, what = "el ar
 /** Lee la factura con Gemini y devuelve los datos ordenados */
 export type Category = { id: number; name: string; subs?: string[] };
 
-export async function readInvoice(images: InvoiceImage[], categories: Category[] = []): Promise<{ data: InvoiceRead; raw: unknown }> {
+export async function readInvoice(images: InvoiceImage[], categories: Category[] = [], sheetText?: string): Promise<{ data: InvoiceRead; raw: unknown }> {
   // Se le pasan las categorías del local para que elija a cuál va cada producto
   const catText = categories.length
     ? `\n\nCATEGORÍAS DEL LOCAL (id: nombre — subcategorías):\n${categories.map((c) => `${c.id}: ${c.name}${c.subs?.length ? ` — ${c.subs.join(", ")}` : ""}`).join("\n")}
 - "categoria_id": SIEMPRE poné el id de la categoría de la lista de arriba que mejor corresponda a ese producto según qué es (ej. un cable USB va en la de cables o cargadores, una funda en la de fundas, un mouse en la de accesorios de PC o gaming). Usá SOLO ids de la lista. Si el nombre no deja claro qué es, elegí igual la más probable (por marca, código o el resto de la factura); nunca lo dejes vacío.`
     : `\n- "categoria_id": null.`;
-  const parsed = await askGemini([{ text: PROMPT + catText }, ...imageParts(images)], SCHEMA, "la factura");
+  const parts: unknown[] = [{ text: PROMPT + catText }];
+  // Factura en Excel/CSV: va como texto (una fila por renglón, celdas separadas por ";")
+  if (sheetText) parts.push({ text: "La factura llegó como PLANILLA de Excel en lugar de foto. Cada renglón es una fila y las columnas van separadas por \";\". Puede tener encabezados, datos del proveedor o totales en otras filas: tomá solo los renglones de productos.\n\nPLANILLA:\n" + sheetText });
+  parts.push(...imageParts(images));
+  const parsed = await askGemini(parts, SCHEMA, "la factura");
   const valid = new Set(categories.map((c) => c.id));
   const data = clean(parsed);
   for (const it of data.items) if (it.categoria_id != null && !valid.has(it.categoria_id)) it.categoria_id = null;

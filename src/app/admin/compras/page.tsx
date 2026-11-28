@@ -7,6 +7,7 @@
 // 4) Al confirmar: suma stock, actualiza costos (y precios con % si se elige)
 // También se puede cargar a mano, sin foto.
 // ═══════════════════════════════════════════════════════════════════
+import { isSheet, sheetLines, SHEET_ACCEPT } from "@/lib/planilla";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { prepareFile } from "@/lib/prepareFile";
 import ListaPrecios from "@/components/admin/ListaPrecios";
@@ -218,7 +219,8 @@ export default function ComprasPage() {
   const [step, setStep] = useState<"subir" | "leyendo" | "revisar" | "listo">("subir");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [files, setFiles] = useState<{ mime: string; data: string; preview: string; name: string }[]>([]);
+  // Fotos/PDF (data en base64) o una planilla de Excel (text: sus filas como texto)
+  const [files, setFiles] = useState<{ mime: string; data: string; preview: string; name: string; text?: string; rows?: number }[]>([]);
   const [over, setOver] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -243,6 +245,7 @@ export default function ComprasPage() {
   const [lines, setLines] = useState<Line[]>([]);
   const [raw, setRaw] = useState<unknown>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const MAX_SHEET_ROWS = 400;   // filas por factura en Excel (para que la IA la lea en un solo pedido)
 
   useEffect(() => {
     api("/api/crm/suppliers").then(setSuppliers).catch(() => {});
@@ -259,10 +262,20 @@ export default function ComprasPage() {
 
   const addFiles = async (list: FileList | File[]) => {
     setErr("");
-    const arr = Array.from(list).slice(0, 4 - files.length);
+    // Excel / CSV: se lee acá y se manda como texto (una planilla por factura)
+    const sheet = Array.from(list).find(isSheet);
+    if (sheet) {
+      try {
+        const lines = await sheetLines(sheet);
+        if (lines.length > MAX_SHEET_ROWS) throw new Error(`La planilla tiene ${lines.length} filas; el máximo por factura es ${MAX_SHEET_ROWS}. Dividila en partes.`);
+        setFiles([{ mime: "sheet", data: "", preview: "", name: sheet.name, text: lines.join("\n"), rows: lines.length }]);
+      } catch (e: any) { setErr(e.message || "No se pudo leer la planilla"); }
+      return;
+    }
+    const arr = Array.from(list).slice(0, 4 - files.filter((f) => !f.text).length);
     try {
       const prepared = await Promise.all(arr.map((f) => prepareFile(f)));
-      setFiles((f) => [...f, ...prepared].slice(0, 4));
+      setFiles((f) => [...f.filter((x) => !x.text), ...prepared].slice(0, 4));
     } catch (e: any) { setErr(e.message); }
   };
 
@@ -278,7 +291,9 @@ export default function ComprasPage() {
     try {
       const d = await api("/api/compras/leer", {
         method: "POST",
-        body: JSON.stringify({ images: files.map(({ mime, data }) => ({ mime, data })), supplier_id: supplierId || null }),
+        body: JSON.stringify(files[0]?.text
+          ? { text: files[0].text, supplier_id: supplierId || null }
+          : { images: files.map(({ mime, data }) => ({ mime, data })), supplier_id: supplierId || null }),
       });
       if (d.supplier) setSupplierId(String(d.supplier.id));
       setNumber(d.invoice.numero || ""); setDate(d.invoice.fecha || ""); setInvoiceTotal(d.invoice.total);
@@ -366,7 +381,7 @@ export default function ComprasPage() {
           <p className="cp-note" style={{ marginTop: 2 }}>
             {tab === "lista"
               ? "Subí la lista de precios del proveedor: la IA la cruza con tus artículos y te muestra los costos nuevos para aprobar."
-              : "Sacale una foto a la factura del proveedor: la IA carga los productos, cantidades y costos, y vos revisás antes de grabar."}
+              : "Sacale una foto a la factura del proveedor (o subí el PDF o Excel): la IA carga los productos, cantidades y costos, y vos revisás antes de grabar."}
           </p>
         </div>
         <div className="cp-tabs">
@@ -416,15 +431,15 @@ export default function ComprasPage() {
             onDrop={(e) => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer.files); }}>
             <div style={{ fontSize: 34, marginBottom: 6 }}>📷</div>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Sacar foto o subir la factura</div>
-            <div className="cp-note" style={{ marginTop: 4 }}>Foto (JPG/PNG) o PDF · hasta 4 páginas · que se lea bien el detalle de productos</div>
-            <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" multiple style={{ display: "none" }}
+            <div className="cp-note" style={{ marginTop: 4 }}>Foto (JPG/PNG), PDF o Excel · hasta 4 fotos · que se lea bien el detalle de productos</div>
+            <input ref={fileRef} type="file" accept={`image/*,application/pdf,${SHEET_ACCEPT}`} multiple style={{ display: "none" }}
               onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
           </div>
           {files.length > 0 && (
             <div className="cp-thumbs">
               {files.map((f, i) => (
                 <div key={i} className="cp-thumb">
-                  {f.preview ? <img src={f.preview} alt="" /> : <span>{f.mime === "application/pdf" ? "📄 PDF" : "🖼"}<br />{f.name}</span>}
+                  {f.preview ? <img src={f.preview} alt="" /> : <span>{f.text ? `📊 Excel · ${f.rows} filas` : f.mime === "application/pdf" ? "📄 PDF" : "🖼"}<br />{f.name}</span>}
                   <button onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label="Quitar">×</button>
                 </div>
               ))}
